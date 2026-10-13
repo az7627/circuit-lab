@@ -6,3 +6,5 @@
 @media(max-width:580px){.workspace.is-fullscreen .component-library{grid-template-columns:repeat(4,minmax(0,1fr));max-height:115px}.workspace.is-fullscreen .component-card{flex-direction:column;gap:2px;padding:4px 2px}.workspace.is-fullscreen .component-card strong{font-size:9px}.workspace.is-fullscreen .component-thumb{width:28px;height:24px}}
 
 .switch-port-label{font:10px Arial,sans-serif;fill:#9b82b3;stroke:none;text-anchor:middle;pointer-events:none}.spdt-options{display:flex;gap:7px;margin:16px 0 10px}.spdt-options .switch-action{flex:1;margin:0;padding:10px 5px;font-size:10px}.spdt-options .active{background:#eee7fc;color:#8060ad;border-color:#bda6d9}
+
+@media(max-width:580px){.experiment-bar #activeExperimentName{max-width:88px}.experiment-bar-right .text-button{min-width:22px}}
