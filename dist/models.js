@@ -3,6 +3,7 @@ export const definitions = {
   lamp: { name: '小灯泡', english: 'Light bulb', prefix: 'L', value: 10, unit: 'Ω', min: 1, max: 50, step: 1 },
   resistor: { name: '电阻', english: 'Resistor', prefix: 'R', value: 10, unit: 'Ω', min: 1, max: 100, step: 1 },
   switch: { name: '开关', english: 'Switch', prefix: 'S', value: 0 },
+  spdt: { name:'双掷开关',english:'SPDT switch',prefix:'SP',idPrefix:'d',value:0,note:'单刀双掷 · 公共端 C 接通 1 或 2 · 双击切换' },
   ammeter: { name: '电流表', english: 'Ammeter', prefix: 'A', value: 0 },
   voltmeter: { name: '电压表', english: 'Voltmeter', prefix: 'V', value: 0 },
   rheostat: { name:'滑动变阻器',english:'Rheostat',prefix:'RV',idPrefix:'t',value:20,unit:'Ω',min:1,max:100,step:1,note:'两端有效电阻 · 右侧滑块调节' },
@@ -13,7 +14,7 @@ export const definitions = {
   inductor: { name:'线圈',english:'Inductor',prefix:'Co',idPrefix:'q',value:100,unit:'mH',min:10,max:1000,step:10,note:'稳态直流理想短路 · 不模拟暂态' },
   fuse: { name:'保险丝',english:'Fuse',prefix:'F',value:1,unit:'A',min:.1,max:5,step:.1,note:'冷态电阻 0.2 Ω · 超过额定电流熔断' }
 };
-export const component = (id, type, x, y, value, angle = 0) => ({ id, type, x, y, value: value ?? definitions[type].value, angle, closed: true, ...(type==='fuse'?{blown:false}:{}) });
+export const component = (id, type, x, y, value, angle = 0) => ({ id, type, x, y, value: value ?? definitions[type].value, angle, closed: true, ...(type==='fuse'?{blown:false}:{}), ...(type==='spdt'?{position:1}:{}) });
 export function createPreset(name,records=[]) {
   let components = [], wires = [], junctions = [];
   const w = (a, b, via) => wires.push({ id: `w${wires.length + 1}`, a, b, ...(via ? { via } : {}) });

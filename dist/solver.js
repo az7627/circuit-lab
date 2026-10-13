@@ -4,7 +4,8 @@
  * have infinite resistance. A voltage supernode formulation avoids the
  * singular matrices caused by open circuits and floating components.
  */
-const TYPES = new Set(['battery','resistor','lamp','switch','ammeter','voltmeter','rheostat','motor','bell','buzzer','heater','capacitor','inductor','fuse']);
+import {terminalIndices,contactIndex} from './terminals.js?v=2.2';
+const TYPES = new Set(['battery','resistor','lamp','switch','spdt','ammeter','voltmeter','rheostat','motor','bell','buzzer','heater','capacitor','inductor','fuse']);
 const RESISTIVE_TYPES = new Set(['resistor','lamp','rheostat','motor','bell','buzzer','heater']);
 const resistanceOf = (component) => component.type === 'fuse' ? 0.2 : component.value;
 const VOLTAGE_EPSILON = 1e-9;
@@ -33,7 +34,7 @@ function batteryPacks(branches,sources,group,voltage,passiveOutflow,readings,zer
     packs.get(id).batteries.push(battery);
   }
   for(const source of sources){const pack=packs.get(group[source.a]);if(!pack)continue;const a=node(source.a),b=node(source.b);for(const n of [a,b]){pack.vertices.add(n);if(a!==b)pack.degree.set(n,(pack.degree.get(n)??0)+1);}}
-  for(const branch of branches){if(['battery','ammeter','inductor'].includes(branch.type)||(branch.type==='switch'&&branch.closed))continue;for(const n of [branch.a,branch.b])packs.get(group[n])?.ports.add(node(n));}
+  for(const branch of branches){if(['battery','ammeter','inductor','spdt'].includes(branch.type)||(branch.type==='switch'&&branch.closed))continue;for(const n of [branch.a,branch.b])packs.get(group[n])?.ports.add(node(n));}
   return [...packs.values()].map(pack=>{
     if(pack.ports.size<2)for(const [n,degree] of pack.degree)if(degree===1)pack.ports.add(n);
     if(pack.ports.size<2){const first=[...pack.ports][0]??node(pack.batteries[0].a);pack.ports.add(first);const furthest=[...pack.vertices].reduce((a,b)=>Math.abs(voltage[a]-voltage[first])>=Math.abs(voltage[b]-voltage[first])?a:b,first);pack.ports.add(furthest);}
@@ -52,8 +53,7 @@ function emptyResult(components, status, message, wires = []) {
     for (const component of components) {
       if (component && typeof component.id === 'string') {
         readings[component.id] = zeroReading();
-        nodes[`${component.id}:0`] = 0;
-        nodes[`${component.id}:1`] = 0;
+        for(const index of terminalIndices(component.type))nodes[`${component.id}:${index}`]=0;
       }
     }
   }
@@ -143,6 +143,7 @@ export function solveCircuit(components, wires, junctions = []) {
   for (const component of components) {
     if (!component || typeof component.id !== 'string' || !component.id ||
       ids.has(component.id) || !TYPES.has(component.type)) return invalid();
+    if(component.type==='spdt'&&![1,2].includes(component.position))return invalid('请选择双掷开关的支路 1 或 2。');
     if ((component.type === 'battery' || RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse'].includes(component.type)) &&
       (typeof component.value !== 'number' || !Number.isFinite(component.value))) return invalid();
     if ((RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse'].includes(component.type)) &&
@@ -150,8 +151,7 @@ export function solveCircuit(components, wires, junctions = []) {
       return invalid('电阻值必须是大于零的有限数值。');
     }
     ids.add(component.id);
-    terminals.set(`${component.id}:0`, terminals.size);
-    terminals.set(`${component.id}:1`, terminals.size);
+    for(const index of terminalIndices(component.type))terminals.set(`${component.id}:${index}`,terminals.size);
   }
   for(const junction of junctions) {
     if(!junction || typeof junction.id !== 'string' || !junction.id || ids.has(junction.id)) return invalid('接线节点数据不完整或标识重复。');
@@ -169,8 +169,8 @@ export function solveCircuit(components, wires, junctions = []) {
     wireEdges.push({ a, b, weight: 1, wireId: wire.id });
   }
   for (const component of components) {
-    if ((component.type === 'switch' && component.closed) || component.type === 'inductor') {
-      const a = terminals.get(`${component.id}:0`), b = terminals.get(`${component.id}:1`);
+    if ((component.type === 'switch' && component.closed) || component.type === 'spdt' || component.type === 'inductor') {
+      const a = terminals.get(`${component.id}:0`), b = terminals.get(`${component.id}:${contactIndex(component)}`);
       union.join(a, b);
       wireEdges.push({ a, b, weight: 1, id: component.id });
     }
@@ -185,7 +185,7 @@ export function solveCircuit(components, wires, junctions = []) {
   const count = compact.size;
   const branches = components.map((component) => ({ ...component,
     a: terminalNodes[terminals.get(`${component.id}:0`)],
-    b: terminalNodes[terminals.get(`${component.id}:1`)] }));
+    b: terminalNodes[terminals.get(`${component.id}:${contactIndex(component)}`)] }));
   const sources = branches.filter((branch) => branch.type === 'battery' || branch.type === 'ammeter')
     .map((branch) => ({ ...branch, emf: branch.type === 'battery' ? branch.value : 0, weight: 1 }));
   const zeroUnion = new UnionFind(count);

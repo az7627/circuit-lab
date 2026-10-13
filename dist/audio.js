@@ -1,4 +1,4 @@
-import {feedbackLevel} from './visuals.js?v=2.1';
+import {feedbackLevel} from './visuals.js?v=2.2';
 export function bellLevel(power){return feedbackLevel(power,2);}
 export class BellAudio{
   constructor(onState=()=>{}){this.context=null;this.master=null;this.voices=[];this.bells=[];this.settings={sound:true,volume:.35};this.onState=onState;this.nextStrike=0;this.timer=null;}

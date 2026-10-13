@@ -1,5 +1,7 @@
 /** Symbol geometry and bounded display helpers, independent of selection state. */
+import {terminalIndices} from './terminals.js?v=2.2';
 export function terminalOffset(type,index) {
+  if(type==='spdt')return index===0?{x:-54,y:0}:{x:54,y:index===1?-24:24};
   if(type==='rheostat') return index===0?{x:-54,y:18}:{x:0,y:-54};
   if(type==='bell') return {x:index===0?-14:14,y:54};
   return {x:index===0?-54:54,y:0};
@@ -9,14 +11,15 @@ export function componentTerminal(c,index) {
   return {x:c.x+p.x*Math.cos(r)-p.y*Math.sin(r),y:c.y+p.x*Math.sin(r)+p.y*Math.cos(r)};
 }
 export function labelOffset(c) {
+  if(c.type==='spdt')return c.angle%180===90?{x:-72,y:4}:{x:0,y:61};
   if(c.type==='bell') return c.angle%180===0?{x:65,y:4}:{x:0,y:48};
   return c.angle%180===90?{x:-64,y:4}:{x:0,y:47};
 }
 export function componentBounds(c) {
-  const corners=c.type==='bell'?[[-28,-28],[28,0]]:[[-55,-31],[55,31]];
+  const corners=c.type==='bell'?[[-28,-28],[28,0]]:c.type==='spdt'?[[-55,-44],[55,44]]:[[-55,-31],[55,31]];
   const r=c.angle*Math.PI/180,points=[];
   for(const x of [corners[0][0],corners[1][0]]) for(const y of [corners[0][1],corners[1][1]])points.push({x:c.x+x*Math.cos(r)-y*Math.sin(r),y:c.y+x*Math.sin(r)+y*Math.cos(r)});
-  points.push(componentTerminal(c,0),componentTerminal(c,1));
+  for(const index of terminalIndices(c.type))points.push(componentTerminal(c,index));
   const l=labelOffset(c);
   points.push({x:c.x+l.x-42,y:c.y+l.y-16},{x:c.x+l.x+42,y:c.y+l.y+23});
   const left=Math.min(...points.map(p=>p.x))-10,top=Math.min(...points.map(p=>p.y))-10;
