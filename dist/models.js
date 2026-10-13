@@ -1,5 +1,5 @@
 export const definitions = {
-  battery: { name: '电源', english: 'DC power', prefix: 'E', value: 6, unit: 'V', min: 1.5, max: 12, step: .5 },
+  battery: { name: '电源', english: 'DC power', prefix: 'E', note:'可以添加多节电池 · 串联或并联', value: 6, unit: 'V', min: 1.5, max: 12, step: .5 },
   lamp: { name: '小灯泡', english: 'Light bulb', prefix: 'L', value: 10, unit: 'Ω', min: 1, max: 50, step: 1 },
   resistor: { name: '电阻', english: 'Resistor', prefix: 'R', value: 10, unit: 'Ω', min: 1, max: 100, step: 1 },
   switch: { name: '开关', english: 'Switch', prefix: 'S', value: 0 },

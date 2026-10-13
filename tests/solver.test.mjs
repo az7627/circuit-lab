@@ -157,6 +157,11 @@ test('compatible parallel ideal batteries share current symmetrically', () => {
   powerBalanced(result);
 });
 
+test('an ammeter in one parallel branch retains the total supply voltage and equivalent resistance',()=>{
+  const result=solveCircuit([battery(),resistor('r1'),resistor('r2'),{id:'a',type:'ammeter'}],[wire('b:0','a:0'),wire('a:1','r1:0'),wire('r1:1','b:1'),wire('b:0','r2:0'),wire('r2:1','b:1')]);
+  close(result.components.a.current,.6);close(result.current,1.2);close(result.sourceVoltage,6);close(result.resistance,5);assert.equal(result.sourceMode,'pack');
+});
+
 test('series batteries add voltage, including reversed polarity', () => {
   for (const secondVoltage of [3, -3]) {
     const result = solveCircuit([battery('b1'), battery('b2', secondVoltage), resistor('r')], [
@@ -165,6 +170,9 @@ test('series batteries add voltage, including reversed polarity', () => {
     assert.equal(result.status, 'ok');
     close(result.components.r.voltage, 6 + secondVoltage);
     close(result.components.r.current, (6 + secondVoltage) / 10);
+    close(result.sourceVoltage,6+secondVoltage);
+    close(result.current,(6+secondVoltage)/10);
+    close(result.resistance,10);
     powerBalanced(result);
   }
 });
@@ -202,6 +210,8 @@ test('independent powered islands each receive a reference voltage and contribut
   ]);
   assert.equal(result.status, 'ok');
   close(result.current, 0.9);
+  assert.equal(result.sourceVoltage,null);
+  assert.equal(result.sourceMode,'multiple');
   close(result.nodes['b1:0'], 6);
   close(result.nodes['b2:0'], 9);
   powerBalanced(result);

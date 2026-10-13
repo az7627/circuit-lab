@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createPreset} from '../dist/models.js';
+import {createPreset,component} from '../dist/models.js';
+import {solveCircuit} from '../dist/solver.js';
 import {normalizeState} from '../dist/data.js';
 import {ExperimentStore,EXPERIMENTS_KEY} from '../dist/experiments.js';
 import {panCamera,viewportGeometry,heaterAppearance,feedbackLevel} from '../dist/visuals.js';
 import {bellLevel} from '../dist/audio.js';
 class MemoryStorage{constructor(){this.values=new Map();this.fail=false;}getItem(k){return this.values.get(k)??null;}setItem(k,v){if(this.fail)throw new Error('QuotaExceeded');this.values.set(k,v);}}
+test('a saved experiment with two series cells reloads and reports the pack voltage and loop current',()=>{
+  const state=createPreset('free');state.components=[component('e1','battery',100,100,1.5),component('e2','battery',250,100,1.5),component('r1','resistor',400,100,10)];state.wires=[{id:'w1',a:'e1:1',b:'e2:0'},{id:'w2',a:'e2:1',b:'r1:1'},{id:'w3',a:'r1:0',b:'e1:0'}];
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage);store.save(state,'两节电池串联');
+  const saved=new ExperimentStore(storage).data.experiments[0].state,result=solveCircuit(saved.components,saved.wires);
+  assert.equal(saved.components.filter(c=>c.type==='battery').length,2);assert.ok(Math.abs(result.sourceVoltage-3)<1e-9);assert.ok(Math.abs(result.current-.3)<1e-9);assert.ok(Math.abs(result.resistance-10)<1e-9);
+});
 test('experiment save, rename, archive, restore and reload retain circuit and measurements',()=>{
   const storage=new MemoryStorage(),store=new ExperimentStore(storage),state=createPreset('parallel');
   const id=store.save(state,'并联比较');store.rename(id,'我的并联实验');store.archive(id);

@@ -1,4 +1,4 @@
-import {lampAppearance,heaterAppearance} from './visuals.js?v=2.0';
+import {lampAppearance,heaterAppearance} from './visuals.js?v=2.1';
 export function symbol(c, {thumbnail=false,power=0,current=0,motion=true}={}) {
   const reading={power,current};
   const active=!thumbnail && Math.abs(current)>1e-8;

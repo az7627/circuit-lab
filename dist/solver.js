@@ -24,6 +24,26 @@ class UnionFind {
 const clean = (value) => Math.abs(value) < 1e-12 ? 0 : value;
 const zeroReading = () => ({ voltage: 0, current: 0, power: 0 });
 
+function batteryPacks(branches,sources,group,voltage,passiveOutflow,readings,zeroUnion){
+  const packs=new Map();
+  const node=n=>zeroUnion.find(n),outflow=new Map();
+  passiveOutflow.forEach((current,n)=>outflow.set(node(n),(outflow.get(node(n))??0)+current));
+  for(const battery of branches.filter(b=>b.type==='battery')){
+    const id=group[battery.a];if(!packs.has(id))packs.set(id,{batteries:[],vertices:new Set(),ports:new Set(),degree:new Map()});
+    packs.get(id).batteries.push(battery);
+  }
+  for(const source of sources){const pack=packs.get(group[source.a]);if(!pack)continue;const a=node(source.a),b=node(source.b);for(const n of [a,b]){pack.vertices.add(n);if(a!==b)pack.degree.set(n,(pack.degree.get(n)??0)+1);}}
+  for(const branch of branches){if(['battery','ammeter','inductor'].includes(branch.type)||(branch.type==='switch'&&branch.closed))continue;for(const n of [branch.a,branch.b])packs.get(group[n])?.ports.add(node(n));}
+  return [...packs.values()].map(pack=>{
+    if(pack.ports.size<2)for(const [n,degree] of pack.degree)if(degree===1)pack.ports.add(n);
+    if(pack.ports.size<2){const first=[...pack.ports][0]??node(pack.batteries[0].a);pack.ports.add(first);const furthest=[...pack.vertices].reduce((a,b)=>Math.abs(voltage[a]-voltage[first])>=Math.abs(voltage[b]-voltage[first])?a:b,first);pack.ports.add(furthest);}
+    const netPower=pack.batteries.reduce((sum,b)=>sum+readings[b.id].power,0);
+    const twoPorts=pack.ports.size===2,ports=[...pack.ports];
+    return {voltage:twoPorts?clean(Math.abs(voltage[ports[0]]-voltage[ports[1]])):null,
+      current:netPower< -1e-12?(twoPorts?clean(Math.abs(outflow.get(ports[0])??0)):clean(pack.batteries.reduce((sum,b)=>sum+(readings[b.id].power<0?Math.abs(readings[b.id].current):0),0))):0};
+  });
+}
+
 function emptyResult(components, status, message, wires = []) {
   const readings = Object.create(null);
   const nodes = Object.create(null);
@@ -279,19 +299,17 @@ export function solveCircuit(components, wires, junctions = []) {
       }
     }
     const batteries = branches.filter((branch) => branch.type === 'battery');
-    let resistance = null;
-    if (powered && batteries.length === 1 && outputCurrent > 0) {
-      resistance = Math.abs(batteries[0].value) / outputCurrent;
-    } else if (powered && batteries.length > 1 && batteries.every((battery) =>
-      battery.a === batteries[0].a && battery.b === batteries[0].b && battery.value === batteries[0].value)) {
-      resistance = Math.abs(batteries[0].value) / outputCurrent;
-    }
+    const packs=batteryPacks(branches,sources,group,voltage,passiveOutflow,readings,zeroUnion);
+    const sourceVoltage=packs.length===1?packs[0].voltage:null;
+    const sourceMode=!packs.length?'none':packs.length>1?'multiple':sourceVoltage===null?'tapped':'pack';
+    const reportedCurrent=clean(packs.reduce((sum,pack)=>sum+pack.current,0));
+    const resistance=powered&&sourceVoltage!==null&&reportedCurrent>0?sourceVoltage/reportedCurrent:null;
     const nodes = Object.create(null);
     for (const [terminal, i] of terminals) nodes[terminal] = clean(voltage[terminalNodes[i]]);
     return { status: powered ? 'ok' : 'open',
       message: powered ? '电路已接通，电压与电流已实时计算。' :
         batteries.length ? '电路未形成有电流的闭合回路，请连接导线并闭合开关。' : '请加入电源并连接闭合回路。',
-      components: readings, current: outputCurrent,
+      components: readings, current: reportedCurrent, sourceVoltage, sourceMode,
       resistance: resistance === null ? null : clean(resistance), powered, nodes, wires: wireReadings };
   } catch {
     return invalid('电路参数无法稳定求解，请检查电阻值与电源连接。');
