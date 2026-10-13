@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#7357ec">
+  <meta name="description" content="动手搭建电路，观察电流与电压，探索串并联和欧姆定律。一个面向中学生的交互式电路虚拟实验室。">
+  <title>电路实验室 · 让物理看得见</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="电路实验室首页"><span class="brand-mark" data-icon="circuit"></span><span>电路实验室<span class="brand-en">CIRCUIT LAB</span></span></a>
+    <span class="header-divider"></span><span class="header-subtitle">让物理，看得见。</span>
+    <div class="header-actions"><span class="school-tag">中学物理 · 电学</span><button class="text-button" id="helpButton"><i data-icon="help"></i>使用帮助</button><span class="avatar">同学</span></div>
+  </header>
+  <div class="app-shell">
+    <aside class="navigation">
+      <div class="nav-caption">探索与学习</div>
+      <button class="nav-item active" id="labNav"><i data-icon="flask"></i>虚拟实验室<span class="nav-dot"></span></button>
+      <button class="nav-item" id="guideNav"><i data-icon="book"></i>实验指南</button>
+      <button class="nav-item" id="recordsNav"><i data-icon="notebook"></i>我的实验记录<span id="recordBadge" class="nav-count">0</span></button>
+      <div class="nav-rule"></div><div class="nav-caption">经典实验</div>
+      <button class="experiment-nav" data-preset="series"><span class="experiment-number">01</span>探索串联电路</button>
+      <button class="experiment-nav" data-preset="parallel"><span class="experiment-number">02</span>探索并联电路</button>
+      <button class="experiment-nav" data-preset="ohm"><span class="experiment-number">03</span>探究欧姆定律</button>
+      <div class="nav-bottom"><div class="little-circuit" data-icon="spark"></div><strong>每一次连接，<br>都是一次发现。</strong><p>从一个小灯泡开始，<br>点亮你的物理好奇心。</p><span class="nav-bottom-line"></span><span class="version">CIRCUIT LAB / v1.0</span></div>
+    </aside>
+    <main>
+      <div class="breadcrumb">物理实验<span>/</span>电学<span>/</span><b>虚拟实验室</b></div>
+      <div class="page-heading"><div><h1>搭建电路，探索电的奥秘<span class="heading-spark">✦</span></h1><p>动手连接元件，观察实时变化，让课本里的知识流动起来。</p></div><button class="button secondary" id="guideButton"><i data-icon="book"></i>实验指南<i data-icon="arrow-up-right"></i></button></div>
+      <div class="experiment-bar"><div class="experiment-selection"><span class="purple-icon" data-icon="flask"></span><div><span class="small-label">当前实验</span><select id="presetSelect" aria-label="选择实验"><option value="series">探索串联电路</option><option value="parallel">探索并联电路</option><option value="ohm">探究欧姆定律</option><option value="free">自由搭建</option></select></div><span class="level-tag">基础实验</span></div><div class="experiment-bar-right"><span class="autosave" id="saveStatus"><span></span>已自动保存</span><button class="text-button" id="resetButton"><i data-icon="reset"></i>重置实验</button><button class="button primary" id="runButton"><i data-icon="pause"></i><span>暂停模拟</span></button></div></div>
+      <section class="workspace" aria-label="电路实验工作台">
+        <aside class="component-panel"><div class="panel-title"><h2>元件库</h2><span class="small-label">6 种元件</span></div><p class="panel-intro">点击或拖入画布添加</p><div id="componentLibrary" class="component-library"></div><div class="library-note"><i data-icon="info"></i><p>点击两个接线端，<br>即可连接一根导线。</p></div><button class="clear-button" id="clearButton"><i data-icon="trash"></i>清空画布</button></aside>
+        <div class="canvas-panel">
+          <div class="canvas-toolbar"><div class="tool-group"><button class="tool-button active" data-tool="select" title="选择与移动 (V)" aria-label="选择与移动"><i data-icon="cursor"></i></button><button class="tool-button" data-tool="wire" title="连接导线 (W)" aria-label="连接导线"><i data-icon="wire"></i></button><button class="tool-button" data-tool="erase" title="删除元件或导线 (E)" aria-label="删除元件或导线"><i data-icon="eraser"></i></button></div><span class="tool-separator"></span><button class="tool-button" id="undoButton" title="撤销 (Ctrl+Z)" aria-label="撤销"><i data-icon="undo"></i></button><div class="canvas-toolbar-right"><button class="tool-button" id="zoomOut" title="缩小" aria-label="缩小"><i data-icon="minus"></i></button><span id="zoomLabel">100%</span><button class="tool-button" id="zoomIn" title="放大" aria-label="放大"><i data-icon="plus"></i></button><span class="tool-separator"></span><button class="tool-button" id="fitButton" title="适应画布" aria-label="适应画布"><i data-icon="expand"></i></button></div></div>
+          <div class="board-wrap" id="boardWrap"><span class="board-caption"><span></span>交互实验画布</span><svg id="board" viewBox="0 0 840 510" xmlns="http://www.w3.org/2000/svg" aria-label="交互电路图"></svg><div class="board-hint" id="boardHint"><i data-icon="cursor"></i><span>拖动元件调整位置 · 点击接线端连接 · 双击开关通断</span></div><button class="board-check" id="checkButton"><i data-icon="check-circle"></i>检查电路</button></div>
+          <div class="canvas-footer"><div id="circuitStatus" class="circuit-status"><span></span>电路已接通</div><label class="toggle-label"><input type="checkbox" id="currentToggle" checked><span class="toggle"></span>显示电流方向</label><span class="model-label">理想直流模型</span></div>
+        </div>
+        <aside class="inspector"><div class="panel-title"><h2>实时测量</h2><span class="live-tag"><span></span>LIVE</span></div><div class="measurement-list"><div class="measurement"><span><i data-icon="current"></i>电路总电流</span><div><strong id="totalCurrent">0.30</strong><b>A</b></div><div class="meter-bar"><span id="currentBar"></span></div></div><div class="measurement"><span><i data-icon="bolt"></i>电源电压</span><div><strong id="totalVoltage">6.00</strong><b>V</b></div></div><div class="measurement"><span><i data-icon="resistance"></i>等效电阻</span><div><strong id="totalResistance">20.0</strong><b>Ω</b></div></div></div><div class="inspector-rule"></div><div class="panel-title"><h2>元件属性</h2><i class="muted" data-icon="sliders"></i></div><div id="componentProperties"></div><div class="physics-note"><span>知识小贴士</span><p id="physicsTip">串联电路中，电流处处相等，<br>总电压等于各部分电压之和。</p><div id="physicsFormula">I = I₁ = I₂ &nbsp; · &nbsp; U = U₁ + U₂</div></div></aside>
+      </section>
+      <section class="data-panel" id="dataPanel"><div class="data-header"><div class="data-tabs"><button class="data-tab active" data-tab="table"><i data-icon="table"></i>实验数据<span id="dataCount">0</span></button><button class="data-tab" data-tab="chart"><i data-icon="chart"></i>数据图表</button></div><div class="data-actions"><button class="text-button" id="exportButton"><i data-icon="download"></i>导出数据</button><button class="button record-button" id="recordButton"><i data-icon="plus"></i>记录本次数据</button></div></div><div id="dataContent"></div></section>
+      <footer class="page-footer"><span><i data-icon="leaf"></i>安全尝试，自由探索。这里，每一次试错都有意义。</span><span>为好奇心而造</span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="guideDialog" aria-labelledby="guideTitle"><div class="dialog-header"><div><span class="eyebrow">LEARN BY DOING</span><h2 id="guideTitle">从连接开始，让发现发生。</h2></div><button class="tool-button" data-close="guideDialog" aria-label="关闭指南"><i data-icon="close"></i></button></div><div class="guide-tabs"><button class="active" data-guide="series">串联电路</button><button data-guide="parallel">并联电路</button><button data-guide="ohm">欧姆定律</button><button data-guide="help">操作帮助</button></div><div id="guideContent"></div><div class="dialog-footer"><span>模拟采用理想电源、导线和电表，灯泡以固定电阻近似。</span><button class="button primary" id="startGuideExperiment">开始这个实验<i data-icon="arrow-right"></i></button></div></dialog>
+  <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle" aria-describedby="confirmDescription"><div class="dialog-header"><h2 id="confirmTitle"></h2><button class="tool-button" data-close="confirmDialog" aria-label="取消"><i data-icon="close"></i></button></div><p id="confirmDescription"></p><div class="confirm-actions"><button class="button secondary" data-close="confirmDialog">取消</button><button class="button primary" id="confirmAction">确认</button></div></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
