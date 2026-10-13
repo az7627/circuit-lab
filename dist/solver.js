@@ -4,7 +4,9 @@
  * have infinite resistance. A voltage supernode formulation avoids the
  * singular matrices caused by open circuits and floating components.
  */
-const TYPES = new Set(['battery', 'resistor', 'lamp', 'switch', 'ammeter', 'voltmeter']);
+const TYPES = new Set(['battery','resistor','lamp','switch','ammeter','voltmeter','rheostat','motor','buzzer','heater','capacitor','inductor','fuse']);
+const RESISTIVE_TYPES = new Set(['resistor','lamp','rheostat','motor','buzzer','heater']);
+const resistanceOf = (component) => component.type === 'fuse' ? 0.2 : component.value;
 const VOLTAGE_EPSILON = 1e-9;
 
 class UnionFind {
@@ -112,24 +114,28 @@ function solveGraph(vertexCount, edges, injection) {
   return { potential, connected };
 }
 
-export function solveCircuit(components, wires) {
+export function solveCircuit(components, wires, junctions = []) {
   const invalid = (message = '元件或导线数据不完整，请检查参数。') =>
     emptyResult(components, 'invalid', message, wires);
-  if (!Array.isArray(components) || !Array.isArray(wires)) return invalid();
+  if (!Array.isArray(components) || !Array.isArray(wires) || !Array.isArray(junctions)) return invalid();
   const terminals = new Map();
   const ids = new Set();
   for (const component of components) {
     if (!component || typeof component.id !== 'string' || !component.id ||
       ids.has(component.id) || !TYPES.has(component.type)) return invalid();
-    if (['battery', 'resistor', 'lamp'].includes(component.type) &&
+    if ((component.type === 'battery' || RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse'].includes(component.type)) &&
       (typeof component.value !== 'number' || !Number.isFinite(component.value))) return invalid();
-    if (['resistor', 'lamp'].includes(component.type) &&
+    if ((RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse'].includes(component.type)) &&
       (!(component.value > 0) || !Number.isFinite(1 / component.value))) {
       return invalid('电阻值必须是大于零的有限数值。');
     }
     ids.add(component.id);
     terminals.set(`${component.id}:0`, terminals.size);
     terminals.set(`${component.id}:1`, terminals.size);
+  }
+  for(const junction of junctions) {
+    if(!junction || typeof junction.id !== 'string' || !junction.id || ids.has(junction.id)) return invalid('接线节点数据不完整或标识重复。');
+    ids.add(junction.id); terminals.set(`${junction.id}:0`,terminals.size);
   }
   const wireEdges = [];
   const wireIds = new Set();
@@ -143,7 +149,7 @@ export function solveCircuit(components, wires) {
     wireEdges.push({ a, b, weight: 1, wireId: wire.id });
   }
   for (const component of components) {
-    if (component.type === 'switch' && component.closed) {
+    if ((component.type === 'switch' && component.closed) || component.type === 'inductor') {
       const a = terminals.get(`${component.id}:0`), b = terminals.get(`${component.id}:1`);
       union.join(a, b);
       wireEdges.push({ a, b, weight: 1, id: component.id });
@@ -201,11 +207,11 @@ export function solveCircuit(components, wires) {
   }
 
   try {
-    const loads = branches.filter((branch) => branch.type === 'resistor' || branch.type === 'lamp');
+    const loads = branches.filter((branch) => RESISTIVE_TYPES.has(branch.type) || (branch.type === 'fuse' && !branch.blown));
     const conductanceEdges = [];
     const injection = new Array(groupCount).fill(0);
     for (const load of loads) {
-      const a = group[load.a], b = group[load.b], weight = 1 / load.value;
+      const a = group[load.a], b = group[load.b], weight = 1 / resistanceOf(load);
       conductanceEdges.push({ a, b, weight });
       injection[a] -= weight * (offset[load.a] - offset[load.b]);
       injection[b] += weight * (offset[load.a] - offset[load.b]);
@@ -215,7 +221,7 @@ export function solveCircuit(components, wires) {
     const passiveOutflow = new Array(count).fill(0);
     const currents = new Map();
     for (const load of loads) {
-      const current = (voltage[load.a] - voltage[load.b]) / load.value;
+      const current = (voltage[load.a] - voltage[load.b]) / resistanceOf(load);
       currents.set(load.id, current);
       passiveOutflow[load.a] += current;
       passiveOutflow[load.b] -= current;
