@@ -30,6 +30,10 @@ export function lampAppearance(power) {
     ring:mix([140,120,172],[183,139,65],level),
     filament:mix([140,120,172],[165,114,49],level)};
 }
+export function feedbackLevel(power,scale=3){return 1-Math.exp(-Math.max(0,Number.isFinite(power)?power:0)/scale);}
+export function heaterAppearance(power){const level=feedbackLevel(power,5);return {level,color:mix([140,120,172],[239,67,38],level),opacity:.45*level,width:2.5+1.5*level};}
+export function viewportGeometry(camera,zoom,viewport){const scale=Math.max(.00001,Math.min(viewport.width/840,viewport.height/510)*zoom);return {scale,x:camera.x-viewport.width/(2*scale),y:camera.y-viewport.height/(2*scale),width:viewport.width/scale,height:viewport.height/scale};}
+export function panCamera(start,dx,dy,scale){return {x:start.x-dx/scale,y:start.y-dy/scale};}
 export function fitCamera(bounds,viewport,padding=36) {
   if(!bounds||!(viewport.width>0)||!(viewport.height>0))return {x:420,y:255,zoom:1};
   const base=Math.min(viewport.width/840,viewport.height/510);

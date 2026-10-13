@@ -1,0 +1,25 @@
+export const icons = {
+  circuit: '<path d="M4 7h7V3m0 4h9v10h-9v4m0-4H4V7m4-3v6m0 4v6"/><circle cx="16" cy="12" r="2"/>',
+  flask: '<path d="M9 3h6m-5 0v6l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 14h8"/><path d="m10 17 1 1m3-2h.01"/>',
+  book: '<path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1v15"/><path d="M6 8h3m6 0h3M6 12h3m6 0h3"/>',
+  notebook: '<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M3 7h4m-4 5h4m-4 5h4m4-10h5m-5 5h5m-5 5h3"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1.5 1-1.5 1.2-1.5 2M12 17h.01"/>',
+  spark: '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3m7-1v4m-2-2h4"/>',
+  'arrow-up-right': '<path d="M7 17 17 7M7 7h10v10"/>', 'arrow-right': '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+  reset: '<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>', play: '<path d="m8 4 12 8-12 8V4Z"/>', pause: '<path d="M8 5v14M16 5v14"/>',
+  cursor: '<path d="m5 3 4 18 4-7 7-4L5 3Z"/>', wire: '<circle cx="4" cy="17" r="2"/><circle cx="20" cy="6" r="2"/><path d="M6 17h6V6h6"/>',
+  eraser: '<path d="m16 3 5 5-12 12H5l-3-3L16 3Zm-7 7 5 5M9 20h12"/>', undo: '<path d="M3 7h11a7 7 0 0 1 0 14h-3M3 7l5-5M3 7l5 5"/>',
+  minus: '<path d="M5 12h14"/>', plus: '<path d="M5 12h14M12 5v14"/>', expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  'check-circle': '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>', current: '<path d="M3 12h18m-5-5 5 5-5 5"/>',
+  bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/>', resistance: '<path d="M3 12h3l2-5 3 10 3-10 2 5h5"/>',
+  sliders: '<path d="M4 7h4m4 0h8M4 17h9m4 0h3"/><circle cx="10" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16m6-16v16"/>',
+  chart: '<path d="M4 3v17h17M7 15l4-5 4 3 5-7"/>', download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+  leaf: '<path d="M20 3c-7 0-15 3-15 9a6 6 0 0 0 6 6c6 0 9-8 9-15ZM3 21l11-11"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>', trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>', rotate: '<path d="M20 9a8 8 0 1 0-2 9M20 3v6h-6"/>',
+  junction: '<path d="M3 12h7m4 0h7M12 3v7m0 4v7"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+  fit:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M2 8V2h6m8 0h6v6M2 16v6h6m8 0h6v-6"/>',
+  collapse:'<path d="M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5"/>'
+};
+export function icon(name) { return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.info}</svg>`; }

@@ -13,4 +13,5 @@ const server = http.createServer(async (req, res) => {
     const body = await readFile(file); res.writeHead(200, {'Content-Type':types[path.extname(file)] || 'application/octet-stream','Cache-Control':'no-store'}).end(body);
   } catch { res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8'}).end('未找到页面'); }
 });
-server.listen(Number(process.env.PORT) || 4173, '127.0.0.1', () => console.log('Local: http://127.0.0.1:4173'));
+const port=Number(process.env.PORT)||4173;
+server.listen(port,'127.0.0.1',()=>console.log(`Local: http://127.0.0.1:${port}`));
