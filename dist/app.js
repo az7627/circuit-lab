@@ -1,5 +1,5 @@
-import { solveCircuit } from './solver.js';
-import { wirePoints, projectOnWire, splitWire } from './wiring.js';
+import { solveCircuit } from './solver.js?v=1.1';
+import { wirePoints, projectOnWire, splitWire } from './wiring.js?v=1.1';
 
 const $ = (id) => document.getElementById(id);
 const svgNS = 'http://www.w3.org/2000/svg';

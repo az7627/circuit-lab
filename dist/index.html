@@ -7,7 +7,7 @@
   <meta name="description" content="动手搭建电路，观察电流与电压，探索串并联和欧姆定律。一个面向中学生的交互式电路虚拟实验室。">
   <title>电路实验室 · 让物理看得见</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=1.1">
 </head>
 <body>
   <header class="site-header">
@@ -47,6 +47,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <dialog id="guideDialog" aria-labelledby="guideTitle"><div class="dialog-header"><div><span class="eyebrow">LEARN BY DOING</span><h2 id="guideTitle">从连接开始，让发现发生。</h2></div><button class="tool-button" data-close="guideDialog" aria-label="关闭指南"><i data-icon="close"></i></button></div><div class="guide-tabs"><button class="active" data-guide="series">串联电路</button><button data-guide="parallel">并联电路</button><button data-guide="ohm">欧姆定律</button><button data-guide="help">操作帮助</button></div><div id="guideContent"></div><div class="dialog-footer"><span>模拟采用理想电源、导线和电表，灯泡以固定电阻近似。</span><button class="button primary" id="startGuideExperiment">开始这个实验<i data-icon="arrow-right"></i></button></div></dialog>
   <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle" aria-describedby="confirmDescription"><div class="dialog-header"><h2 id="confirmTitle"></h2><button class="tool-button" data-close="confirmDialog" aria-label="取消"><i data-icon="close"></i></button></div><p id="confirmDescription"></p><div class="confirm-actions"><button class="button secondary" data-close="confirmDialog">取消</button><button class="button primary" id="confirmAction">确认</button></div></dialog>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=1.1"></script>
 </body>
 </html>
