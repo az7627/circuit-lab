@@ -36,6 +36,6 @@ export function createPreset(name,records=[]) {
     w('a1:1', 'r1:0', [{ x: 730, y: 135 }, { x: 730, y: 370 }]); w('r1:1', 'e1:1', [{ x: 145, y: 370 }]);
     w('r1:1', 'v1:1', [{ x: 505, y: 370 }, { x: 505, y: 255 }]); w('r1:0', 'v1:0', [{ x: 700, y: 370 }, { x: 700, y: 255 }]);
   }
-  return { preset: name, components, wires, junctions, running: true, showCurrent: true, records, nextId: 20,viewModelVersion:2 };
+  return { preset: name, components, wires, junctions, running: true, showCurrent: true, records, nextId: 20,viewModelVersion:2,viewMode:'schematic' };
 }
 
