@@ -1,4 +1,4 @@
-import {clone,normalizeState} from './data.js?v=2.5';
+import {clone,normalizeState} from './data.js?v=2.6';
 export const EXPERIMENTS_KEY='circuit-lab-experiments-v2';
 const defaultSettings={sound:true,volume:.35,motion:true};
 export function emptyCollection(){return {version:2,experiments:[],activeId:null,draft:null,draftName:'未保存的实验',settings:{...defaultSettings}};}

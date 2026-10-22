@@ -1,10 +1,17 @@
-import {meterRanges,meterScale} from './meters.js?v=2.5';
-import {feedbackLevel,lampAppearance} from './visuals.js?v=2.5';
-import {terminalIndices} from './terminals.js?v=2.5';
-import {componentTerminal} from './visuals.js?v=2.5';
+import {meterRanges,meterScale} from './meters.js?v=2.6';
+import {feedbackLevel,lampAppearance} from './visuals.js?v=2.6';
+import {terminalIndices} from './terminals.js?v=2.6';
+import {componentTerminal} from './visuals.js?v=2.6';
 
 // Terminal identities stay stable; student meters expose three physical binding posts.
-const extents={battery:[-58,-32,58,32],lamp:[-58,-46,58,29],resistor:[-58,-19,58,19],switch:[-58,-39,58,24],spdt:[-58,-42,58,42],ammeter:[-58,-45,58,49],voltmeter:[-58,-45,58,49],rheostat:[-58,-58,51,31],motor:[-58,-33,58,37],bell:[-37,-36,37,58],heater:[-58,-28,58,28],capacitor:[-58,-29,58,29],inductor:[-58,-25,58,25],fuse:[-58,-17,58,17]};
+const extents={battery:[-58,-32,58,32],lamp:[-58,-56,58,29],resistor:[-58,-19,58,19],switch:[-58,-39,58,24],spdt:[-58,-42,58,42],ammeter:[-58,-45,58,49],voltmeter:[-58,-45,58,49],rheostat:[-58,-58,51,31],motor:[-58,-33,58,37],bell:[-37,-36,37,58],heater:[-58,-28,58,28],capacitor:[-58,-29,58,29],inductor:[-58,-25,58,25],fuse:[-58,-17,58,17]};
+
+/** Routing uses actual solids rather than the selection rectangle's empty corners. */
+export function physicalObstacleBoxes(c) {
+  const solids={battery:[[-47,-31,47,31]],lamp:[[-26,-56,26,-3],[-47,-7,47,29]],resistor:[[-29,-19,29,19]],switch:[[-47,-39,47,24]],spdt:[[-47,-39,47,39]],ammeter:[[-47,-45,47,49]],voltmeter:[[-47,-45,47,49]],rheostat:[[-49,-39,51,31],[-3,-54,3,-35]],motor:[[-34,-33,34,37]],bell:[[-35,-36,35,49],[-17,43,-11,54],[11,43,17,54]],heater:[[-43,-26,43,26]],capacitor:[[-29,-27,29,27]],inductor:[[-40,-25,40,25]],fuse:[[-33,-16,33,16]]}[c.type]??[extents[c.type]];
+  const leads=!['ammeter','voltmeter','rheostat','bell','spdt'].includes(c.type)?[[-54,-2,-40,2],[40,-2,54,2]]:c.type==='spdt'?[[-54,-2,-40,2],[40,-26,54,-22],[40,22,54,26]]:[];
+  const r=c.angle*Math.PI/180;return [...solids,...leads].map(([left,top,right,bottom])=>{const points=[];for(const x of [left,right])for(const y of [top,bottom])points.push({x:c.x+x*Math.cos(r)-y*Math.sin(r),y:c.y+x*Math.sin(r)+y*Math.cos(r)});const x=Math.min(...points.map(p=>p.x)),y=Math.min(...points.map(p=>p.y));return {x,y,width:Math.max(...points.map(p=>p.x))-x,height:Math.max(...points.map(p=>p.y))-y};});
+}
 const screw=(x,y,color='#b8c0c8')=>`<g transform="translate(${x} ${y})"><circle r="5.5" fill="${color}" stroke="#697580" stroke-width="1.2"/><path d="m-2.5 2.5 5-5" stroke="#52606d" stroke-width="1.2"/></g>`;
 const lead=d=>`<path d="${d}" fill="none" stroke="#929da8" stroke-width="4"/><path d="${d}" fill="none" stroke="#dfe5e9" stroke-width="1.2"/>`;
 const text=(c,x,y,value,size=8,color='#52606d')=>`<text x="${x}" y="${y}" transform="rotate(${-(c.angle??0)} ${x} ${y})" fill="${color}" stroke="none" text-anchor="middle" font-family="Arial,Microsoft YaHei,sans-serif" font-size="${size}">${value}</text>`;

@@ -1,5 +1,5 @@
 /** Symbol geometry and bounded display helpers, independent of selection state. */
-import {terminalIndices} from './terminals.js?v=2.5';
+import {terminalIndices} from './terminals.js?v=2.6';
 export function terminalOffset(type,index,mode='schematic') {
   if(type==='battery')return {x:index===0?54:-54,y:0};
   if(type==='ammeter'||type==='voltmeter')return mode==='physical'?{x:index===1?-32:index===2?0:32,y:34}:{x:index===1?-54:54,y:0};

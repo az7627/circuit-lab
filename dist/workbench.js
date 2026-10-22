@@ -1,18 +1,18 @@
-import {convertView,routeCircuit,moveItem} from './layout.js?v=2.5';
-import {isMeter,meterConnection,meterScale,visibleTerminals,terminalLabel} from './meters.js?v=2.5';
-import {solveCircuit} from './solver.js?v=2.5';
-import {definitions,component,createPreset} from './models.js?v=2.5';
-import {symbol,thumbnail} from './symbols.js?v=2.5';
-import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.5';
-import {icons,icon} from './icons.js?v=2.5';
-import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera,feedbackLevel} from './visuals.js?v=2.5';
-import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute} from './wiring.js?v=2.5';
-import {clone,normalizeState} from './data.js?v=2.5';
-import {ExperimentStore,normalizeCollection} from './experiments.js?v=2.5';
-import {BellAudio} from './audio.js?v=2.5';
-import {RotorMotion} from './motion.js?v=2.5';
-import {terminalIndices} from './terminals.js?v=2.5';
-import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.5';
+import {convertView,routeCircuit,moveItem} from './layout.js?v=2.6';
+import {isMeter,meterConnection,meterScale,visibleTerminals,terminalLabel} from './meters.js?v=2.6';
+import {solveCircuit} from './solver.js?v=2.6';
+import {definitions,component,createPreset} from './models.js?v=2.6';
+import {symbol,thumbnail} from './symbols.js?v=2.6';
+import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.6';
+import {icons,icon} from './icons.js?v=2.6';
+import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera,feedbackLevel} from './visuals.js?v=2.6';
+import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute} from './wiring.js?v=2.6';
+import {clone,normalizeState} from './data.js?v=2.6';
+import {ExperimentStore,normalizeCollection} from './experiments.js?v=2.6';
+import {BellAudio} from './audio.js?v=2.6';
+import {RotorMotion} from './motion.js?v=2.6';
+import {terminalIndices} from './terminals.js?v=2.6';
+import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.6';
 
 Object.assign(icons,{redo:'<path d="M21 7H10a7 7 0 0 0 0 14h3m8-14-5-5m5 5-5 5"/>',settings:'<path d="m9 3-1 3-3 1 1 3-1 3 3 1 1 3h6l1-3 3-1-1-3 1-3-3-1-1-3H9Z"/><circle cx="12" cy="10" r="3"/>',pencil:'<path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-3 3 5 5"/>',save:'<path d="M4 3h13l4 4v14H3V3h1Zm3 0v6h9V3M7 21v-8h10v8"/>',archive:'<rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v13h14V8m-10 4h6"/>',restore:'<path d="M3 9a9 9 0 1 1 2 9M3 3v6h6M12 8v8m-3-3 3 3 3-3"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>'});
 const $=id=>document.getElementById(id),svgNS='http://www.w3.org/2000/svg';
@@ -149,12 +149,12 @@ $('board').addEventListener('pointerdown',event=>{
   if(tool==='erase'&&id){deleteSelected(id);return;}
   if(tool==='junction'&&terminal){if(state.viewMode==='physical'&&!pendingTerminal){beginWire(terminal.dataset.terminal);gesture={kind:'wire',startX:event.clientX,startY:event.clientY,moved:false};$('board').setPointerCapture(event.pointerId);event.preventDefault();}else connectTerminal(terminal.dataset.terminal);return;}
   if(tool==='junction'&&wire){placeJunction(pointFromEvent(event),wire.dataset.wire);return;}
-  if(id){cancelWire();selected=id;renderProperties();renderBoard();if(comp||node){const p=pointFromEvent(event),item=getItem(id);gesture={kind:'item',id,offsetX:p.x-item.x,offsetY:p.y-item.y,startX:event.clientX,startY:event.clientY,before:clone(state),moved:false};$('board').setPointerCapture(event.pointerId);}return;}
+  if(id){cancelWire();selected=id;renderProperties();renderBoard();if(comp||node){const p=pointFromEvent(event),item=getItem(id);gesture={kind:'item',id,offsetX:p.x-item.x,offsetY:p.y-item.y,startX:event.clientX,startY:event.clientY,before:clone(state),routing:{},moved:false};$('board').setPointerCapture(event.pointerId);}return;}
   if(tool==='junction'&&pendingTerminal&&state.viewMode==='physical'){placeJunction(pointFromEvent(event));return;}
   gesture={kind:'blank',startX:event.clientX,startY:event.clientY,camera:{...camera},scale:viewportGeometry(camera,zoom,$('boardWrap').getBoundingClientRect()).scale,moved:false};$('board').setPointerCapture(event.pointerId);
 });
 function sampleWire(event){if(!pendingTerminal||state.viewMode!=='physical')return;const scale=viewportGeometry(camera,zoom,$('boardWrap').getBoundingClientRect()).scale,samples=event.getCoalescedEvents?.()??[];for(const sample of samples.length?samples:[event]){const p=pointFromEvent(sample),previous=pendingTrace.at(-1)??terminalPoint(pendingTerminal);if(Math.hypot(p.x-previous.x,p.y-previous.y)*scale>=1.5)pendingTrace.push({x:p.x,y:p.y});}if(pendingTrace.length>4096)pendingTrace=simplifyTrace(pendingTrace,.75/scale);}
-$('board').addEventListener('pointermove',event=>{lastPointer=pointFromEvent(event);if(!gesture){sampleWire(event);renderPreview();return;}const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;if(!gesture.moved&&Math.hypot(dx,dy)<4)return;gesture.moved=true;if(gesture.kind==='wire'){sampleWire(event);renderPreview();}else if(gesture.kind==='item'){const item=getItem(gesture.id);moveItem(state,item.id,{x:Math.round((lastPointer.x-gesture.offsetX)/10)*10,y:Math.round((lastPointer.y-gesture.offsetY)/10)*10},gesture.before);renderBoard();}else{camera=panCamera(gesture.camera,dx,dy,gesture.scale);$('boardWrap').classList.add('is-panning');updateViewport();}});
+$('board').addEventListener('pointermove',event=>{lastPointer=pointFromEvent(event);if(!gesture){sampleWire(event);renderPreview();return;}const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;if(!gesture.moved&&Math.hypot(dx,dy)<4)return;gesture.moved=true;if(gesture.kind==='wire'){sampleWire(event);renderPreview();}else if(gesture.kind==='item'){const item=getItem(gesture.id),step=state.viewMode==='physical'?.5:10;moveItem(state,item.id,{x:Math.round((lastPointer.x-gesture.offsetX)/step)*step,y:Math.round((lastPointer.y-gesture.offsetY)/step)*step},gesture.before,{preview:state.viewMode==='physical',session:gesture.routing});renderBoard();}else{camera=panCamera(gesture.camera,dx,dy,gesture.scale);$('boardWrap').classList.add('is-panning');updateViewport();}});
 function finishGesture(event,cancelled=false){
   if(!gesture)return;const current=gesture;gesture=null;if($('board').hasPointerCapture(event.pointerId))$('board').releasePointerCapture(event.pointerId);$('boardWrap').classList.remove('is-panning');if(cancelled||current.moved)lastSwitchClick=null;
   if(current.kind==='wire'){
@@ -164,7 +164,7 @@ function finishGesture(event,cancelled=false){
     lastPointer=pointFromEvent(event);sampleWire(event);const target=document.elementFromPoint(event.clientX,event.clientY),terminal=target?.closest('[data-terminal]'),wire=target?.closest('[data-wire]');
     if(terminal)connectTerminal(terminal.dataset.terminal);else if(wire)placeJunction(lastPointer,wire.dataset.wire);else if(target?.closest('#board')&&!target.closest('[data-component]'))placeJunction(lastPointer);else{cancelWire();renderBoard();}return;
   }
-  if(current.kind==='item'&&current.moved){pushHistory(current.before);update();}else if(current.moved){saveSoon();}else if(!cancelled&&current.kind==='item'&&['switch','spdt'].includes(getComponent(current.id)?.type)){const now=event.timeStamp,previous=lastSwitchClick;if(previous?.id===current.id&&previous.tool===tool&&now-previous.time<=500&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<=6)toggleSwitch(current.id);else lastSwitchClick={id:current.id,time:now,x:event.clientX,y:event.clientY,tool};}else if(!cancelled&&current.kind==='blank'){if(tool==='junction')placeJunction(pointFromEvent(event));else if(tool==='select'){selected=null;renderBoard();renderProperties();}}
+  if(current.kind==='item'&&current.moved){if(state.viewMode==='physical')moveItem(state,current.id,{},current.before,{finalize:true,session:current.routing});pushHistory(current.before);update();}else if(current.moved){saveSoon();}else if(!cancelled&&current.kind==='item'&&['switch','spdt'].includes(getComponent(current.id)?.type)){const now=event.timeStamp,previous=lastSwitchClick;if(previous?.id===current.id&&previous.tool===tool&&now-previous.time<=500&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<=6)toggleSwitch(current.id);else lastSwitchClick={id:current.id,time:now,x:event.clientX,y:event.clientY,tool};}else if(!cancelled&&current.kind==='blank'){if(tool==='junction')placeJunction(pointFromEvent(event));else if(tool==='select'){selected=null;renderBoard();renderProperties();}}
 }
 $('board').addEventListener('pointerup',e=>finishGesture(e));$('board').addEventListener('pointercancel',e=>finishGesture(e,true));
 $('board').addEventListener('wheel',e=>{e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.0012),e);},{passive:false});

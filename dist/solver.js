@@ -4,7 +4,7 @@
  * have infinite resistance. A voltage supernode formulation avoids the
  * singular matrices caused by open circuits and floating components.
  */
-import {terminalIndices,contactIndex} from './terminals.js?v=2.5';
+import {terminalIndices,contactIndex} from './terminals.js?v=2.6';
 const TYPES = new Set(['battery','resistor','lamp','switch','spdt','ammeter','voltmeter','rheostat','motor','bell','buzzer','heater','capacitor','inductor','fuse']);
 const RESISTIVE_TYPES = new Set(['resistor','lamp','rheostat','motor','bell','buzzer','heater']);
 const resistanceOf = (component) => component.type === 'fuse' ? 0.2 : component.value;

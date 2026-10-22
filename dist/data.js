@@ -1,6 +1,6 @@
-import {definitions} from './models.js?v=2.5';
-import {upgradeStoredState} from './visuals.js?v=2.5';
-import {terminalIndices} from './terminals.js?v=2.5';
+import {definitions} from './models.js?v=2.6';
+import {upgradeStoredState} from './visuals.js?v=2.6';
+import {terminalIndices} from './terminals.js?v=2.6';
 export const clone=value=>JSON.parse(JSON.stringify(value));
 export function normalizeState(input){
   if(!input||typeof input!=='object')return null;
@@ -26,7 +26,9 @@ export function normalizeState(input){
     if(!d.layouts||typeof d.layouts!=='object'||Array.isArray(d.layouts))return null;
     const layouts={};for(const mode of ['schematic','physical']){const layout=d.layouts[mode];if(!layout)continue;if(!layout.poses||typeof layout.poses!=='object'||Array.isArray(layout.poses)||Object.keys(layout.poses).length>700)return null;
       const poses={};for(const [id,p] of Object.entries(layout.poses)){if(!ids.has(id))continue;if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||(p.angle!==undefined&&![0,90,180,270].includes(p.angle)))return null;poses[id]={x:p.x,y:p.y,...(p.angle!==undefined?{angle:p.angle}:{})};}
-      const view=layout.view;if(view&&(!Number.isFinite(view.x)||!Number.isFinite(view.y)||!Number.isFinite(view.zoom)||view.zoom<=0||view.zoom>5))return null;layouts[mode]={poses,...(view?{view:{x:view.x,y:view.y,zoom:view.zoom}}:{})};
+      if(layout.version!==undefined&&(!Number.isSafeInteger(layout.version)||layout.version<1||layout.version>2))return null;
+      if(layout.signature!==undefined&&(typeof layout.signature!=='string'||layout.signature.length>200000))return null;
+      const view=layout.view;if(view&&(!Number.isFinite(view.x)||!Number.isFinite(view.y)||!Number.isFinite(view.zoom)||view.zoom<=0||view.zoom>5))return null;layouts[mode]={poses,...(layout.version!==undefined?{version:layout.version}:{}),...(layout.signature!==undefined?{signature:layout.signature}:{}),...(view?{view:{x:view.x,y:view.y,zoom:view.zoom}}:{})};
     }d.layouts=layouts;
   }
   const view=d.view;
