@@ -146,3 +146,38 @@ test('bridge networks, multiple supplies and both SPDT throws survive general gr
 test('all physical parts route outside their solids and retain terminal escape space after rotation',()=>{
   for(const type of Object.keys(definitions))for(const angle of [0,90,180,270])for(const ports of ['ammeter','voltmeter'].includes(type)?[[0,1],[2,1]]:[terminalIndices(type)]){const s=createPreset('free');s.viewMode='physical';s.components=[component('e1','battery',80,390),component('p1',type,360,150,undefined,angle)];s.wires=ports.map((index,i)=>({id:`w${i+1}`,a:`p1:${index}`,b:`e1:${index===1?1:0}`}));routeCircuit(s,'physical');for(const w of s.wires)assert.ok(routeIsClear(wirePoints(w,k=>pointIn(s,k),'physical'),s,w),`${type} ${angle} ${w.id}`);}
 });
+
+function releaseScene(){
+  const state=createPreset('free');state.viewMode='physical';
+  state.components=[component('s1','switch',180,140),component('l1','lamp',650,140,10),component('a1','ammeter',670,340),component('e1','battery',440,390,6)];
+  const routes=[
+    ['s1:1','l1:0',[[266,118],[300,106],[356,96],[412,88],[466,90],[514,102],[552,118]]],
+    ['l1:1','a1:1',[[720,166],[724,190],[710,206],[662,220],[606,232],[576,250],[566,278],[566,322],[570,348],[600,362],[622,370]]],
+    ['e1:1','s1:0',[[360,392],[342,390],[330,366],[316,342],[286,320],[242,300],[196,282],[156,254],[130,224],[112,190],[110,164],[120,145]]],
+    ['e1:0','a1:2',[[520,398],[550,410],[590,414],[620,410],[654,408],[660,390]]]
+  ];
+  state.wires=routes.map(([a,b,via],i)=>({id:`w${i+1}`,a,b,physicalVia:via.map(([x,y])=>({x,y}))}));return state;
+}
+
+test('physical meter leads may leave a binding post sideways without triggering a reroute',()=>{
+  const state=releaseScene(),before=clone(state);assert.equal(countWireCrossings(state),0);
+  for(const w of state.wires)assert.ok(routeIsClear(wirePoints(w,k=>pointIn(state,k),'physical'),state,w),w.id);
+  moveItem(state,'e1',{},before,{finalize:true});assert.deepEqual(state.wires,before.wires);
+});
+
+test('releasing the screenshot battery drag preserves every clear preview point and the other leads',()=>{
+  const state=releaseScene(),before=clone(state),session={};
+  for(let i=1;i<=40;i++)moveItem(state,'e1',{x:440-170*i/40,y:390-80*i/40},before,{preview:true,session});
+  assert.equal(countWireCrossings(state),0);for(const w of state.wires)assert.ok(routeIsClear(wirePoints(w,k=>pointIn(state,k),'physical'),state,w),w.id);
+  const preview=clone(state.wires);moveItem(state,'e1',{},before,{finalize:true,session});assert.deepEqual(state.wires,preview);
+  assert.deepEqual(state.wires.slice(0,2),before.wires.slice(0,2));assert.deepEqual(connections(state),connections(before));assert.equal(solveCircuit(state.components,state.wires,state.junctions).current,.6);
+});
+
+test('release repairs only the obstructed span while preserving the distant hand-drawn curve',()=>{
+  const state=createPreset('free');state.viewMode='physical';state.components=[component('r1','resistor',300,250)];state.junctions=[{id:'n1',x:0,y:0},{id:'n2',x:600,y:0}];
+  const trace=[[50,-10],[100,-15],[150,-10],[190,0],[230,0],[270,0],[300,0],[330,0],[370,0],[410,0],[450,-10],[500,-15],[550,-10]].map(([x,y])=>({x,y}));
+  state.wires=[{id:'w1',a:'n1:0',b:'n2:0',physicalVia:clone(trace)}];const before=clone(state);state.components[0].y=0;
+  assert.equal(routeIsClear(wirePoints(state.wires[0],k=>pointIn(state,k),'physical'),state,state.wires[0]),false);
+  moveItem(state,'r1',{},before,{finalize:true});const route=state.wires[0];assert.ok(routeIsClear(wirePoints(route,k=>pointIn(state,k),'physical'),state,route));
+  assert.deepEqual(route.physicalVia.slice(0,3),trace.slice(0,3));assert.deepEqual(route.physicalVia.slice(-3),trace.slice(-3));assert.deepEqual(connections(state),connections(before));
+});

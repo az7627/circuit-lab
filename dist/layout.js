@@ -27,12 +27,13 @@ function portDirection(c,index,mode) {
   if(c.type==='rheostat')d=index===0?{x:-1,y:0}:{x:0,y:-1};
   const r=c.angle*Math.PI/180;return {x:Math.round(d.x*Math.cos(r)-d.y*Math.sin(r)),y:Math.round(d.x*Math.sin(r)+d.y*Math.cos(r))};
 }
-function boxesFor(state,mode){return state.components.flatMap(c=>(mode==='physical'?physicalObstacleBoxes(c):[componentHitBounds(c)]).map(box=>({...inflate(box,mode==='physical'?6:8),id:c.id,component:c,mode})));}
-function clippedLength(a,b,box) {
+function boxesFor(state,mode,clearance=mode==='physical'?6:8){return state.components.flatMap(c=>(mode==='physical'?physicalObstacleBoxes(c):[componentHitBounds(c)]).map(box=>({...inflate(box,clearance),id:c.id,component:c,mode})));}
+function clipSegment(a,b,box) {
   let lo=0,hi=1;const dx=b.x-a.x,dy=b.y-a.y;
-  for(const [p,q] of [[-dx,a.x-box.x],[dx,box.x+box.width-a.x],[-dy,a.y-box.y],[dy,box.y+box.height-a.y]]){if(Math.abs(p)<eps){if(q<=eps)return 0;}else{const t=q/p;if(p<0)lo=Math.max(lo,t);else hi=Math.min(hi,t);if(lo>=hi-eps)return 0;}}
-  return Math.max(0,Math.min(1,hi)-Math.max(0,lo))*distance(a,b);
+  for(const [p,q] of [[-dx,a.x-box.x],[dx,box.x+box.width-a.x],[-dy,a.y-box.y],[dy,box.y+box.height-a.y]]){if(Math.abs(p)<eps){if(q<=eps)return null;}else{const t=q/p;if(p<0)lo=Math.max(lo,t);else hi=Math.min(hi,t);if(lo>=hi-eps)return null;}}
+  return {a:{x:a.x+lo*dx,y:a.y+lo*dy},b:{x:a.x+hi*dx,y:a.y+hi*dy},length:Math.max(0,hi-lo)*distance(a,b)};
 }
+const clippedLength=(a,b,box)=>clipSegment(a,b,box)?.length??0;
 function exits(points,boxes,wire) {
   const ranges=new Map();for(const box of boxes){let start=0,end=points.length-1;
     if(box.id===wire.a.split(':')[0]&&inside(points[0],box)){start=points.findIndex(p=>!inside(p,box));if(start<0)start=points.length;}
@@ -42,22 +43,24 @@ function exits(points,boxes,wire) {
 }
 function portCorridor(p,origin,box,key) {
   if(!box?.component)return true;const d=portDirection(box.component,Number(key.split(':')[1]),box.mode),dx=p.x-origin.x,dy=p.y-origin.y,along=dx*d.x+dy*d.y,across=Math.abs(dx*d.y-dy*d.x);
+  // Binding posts are external attachment points: a lead may leave the nut sideways.
+  if(box.mode==='physical'&&Math.hypot(dx,dy)<=26)return true;
   return along>=-eps&&across<=6+Math.max(0,along)*.5;
 }
-function bodyCost(points,boxes,wire) {
+function bodyCost(points,boxes,wire,blockedSegments=null) {
   const ranges=exits(points,boxes,wire),blocked=new Set();let penetration=0;
   for(let i=1;i<points.length;i++)for(const box of boxes){
-    const a=points[i-1],b=points[i],range=ranges.get(box);
-    if(i<=range.start&&portCorridor(a,points[0],box,wire.a)&&portCorridor(b,points[0],box,wire.a)||i>range.end&&portCorridor(a,points.at(-1),box,wire.b)&&portCorridor(b,points.at(-1),box,wire.b))continue;
-    const length=clippedLength(points[i-1],points[i],box);if(length>eps){blocked.add(box.id??box);penetration+=length;}
+    const hit=clipSegment(points[i-1],points[i],box),range=ranges.get(box);if(!hit||hit.length<eps)continue;
+    if(i<=range.start&&portCorridor(hit.a,points[0],box,wire.a)&&portCorridor(hit.b,points[0],box,wire.a)||i>range.end&&portCorridor(hit.a,points.at(-1),box,wire.b)&&portCorridor(hit.b,points.at(-1),box,wire.b))continue;
+    blocked.add(box.id??box);penetration+=hit.length;blockedSegments?.add(i);
   }
   return blocked.size+penetration/10000;
 }
 export function routeIsClear(points,state,wire,mode=state.viewMode) {
   if(points.length<2)return true;
   if(mode==='schematic'&&points.some((p,i)=>i&&Math.abs(p.x-points[i-1].x)>eps&&Math.abs(p.y-points[i-1].y)>eps))return false;
-  for(const [index,next] of [[0,1],[points.length-1,points.length-2]]){const d=direction(state,index===0?wire.a:wire.b,mode);if(d){const a=points[index],b=points[next];if((b.x-a.x)*d.x+(b.y-a.y)*d.y< -eps)return false;}}
-  return bodyCost(points,boxesFor(state,mode),wire)<eps;
+  if(mode==='schematic')for(const [index,next] of [[0,1],[points.length-1,points.length-2]]){const d=direction(state,index===0?wire.a:wire.b,mode);if(d){const a=points[index],b=points[next];if((b.x-a.x)*d.x+(b.y-a.y)*d.y< -eps)return false;}}
+  return bodyCost(points,boxesFor(state,mode,mode==='physical'?2:8),wire)<eps;
 }
 
 /** Proper crossings, T contacts and overlap, including intersections at grid vertices. */
@@ -95,7 +98,7 @@ class Heap {
 function sparse(points,max=12) {if(points.length<=max)return points;const out=[];for(let i=0;i<max;i++)out.push(points[Math.round(i*(points.length-1)/(max-1))]);return out;}
 
 /** Lexicographic A*: crossings, then component penetration, then shape and length. */
-export function routeOrthogonal(start,end,boxes=[],tracks=[],{startDirection=null,endDirection=null,hint=[],allowBodyCrossings=false,ports=[]}={}) {
+export function routeOrthogonal(start,end,boxes=[],tracks=[],{startDirection=null,endDirection=null,hint=[],allowBodyCrossings=false,ports=[],bendCost=24}={}) {
   tracks=trackList(tracks);const xs=[start.x,end.x],ys=[start.y,end.y],margin=180;
   const region={x:Math.min(start.x,end.x,...hint.map(p=>p.x))-margin,y:Math.min(start.y,end.y,...hint.map(p=>p.y))-margin};region.width=Math.max(start.x,end.x,...hint.map(p=>p.x))-region.x+margin;region.height=Math.max(start.y,end.y,...hint.map(p=>p.y))-region.y+margin;
   // A long existing lead must be bypassable at its ends, even beyond the local window.
@@ -119,7 +122,7 @@ export function routeOrthogonal(start,end,boxes=[],tracks=[],{startDirection=nul
         costs.set(key,[tracks.reduce((n,t)=>n+crosses(a,b,t),0),penetration,length*(1+.045*deviation)]);
       }
       const cost=costs.get(key);if(!allowBodyCrossings&&cost[1]>eps)continue;
-      const score=[g[0][id]+cost[0],g[1][id]+cost[1],g[2][id]+cost[2]+(dir&&dir!==nextDir?24:0)];if(compare(score,g.map(layer=>layer[next]))>=0)continue;
+      const score=[g[0][id]+cost[0],g[1][id]+cost[1],g[2][id]+cost[2]+(dir&&dir!==nextDir?bendCost:0)];if(compare(score,g.map(layer=>layer[next]))>=0)continue;
       score.forEach((v,i)=>g[i][next]=v);previous[next]=id;heap.push({id:next,rank:[score[0],score[1],score[2]+Math.abs(b.x-end.x)+Math.abs(b.y-end.y)]});
     }
   }
@@ -132,7 +135,7 @@ function scoreRoute(points,tracks,boxes,wire,hint=[]) {
   return [tracks.reduce((n,t)=>n+crossingsBetween(points,t),0),bodyCost(points,boxes,wire),lengthOf(points)+Math.max(0,simplifyTrace(points,2).length-2)*24+deviation*.045];
 }
 function plannedRoute(state,wire,mode,boxes,tracks,hint=[]) {
-  const a=pointIn(state,wire.a,mode),b=pointIn(state,wire.b,mode),options={startDirection:direction(state,wire.a,mode),endDirection:direction(state,wire.b,mode),hint,ports:[{owner:wire.a.split(':')[0],origin:a,d:direction(state,wire.a,mode)},{owner:wire.b.split(':')[0],origin:b,d:direction(state,wire.b,mode)}]};
+  const a=pointIn(state,wire.a,mode),b=pointIn(state,wire.b,mode),options={startDirection:direction(state,wire.a,mode),endDirection:direction(state,wire.b,mode),hint:mode==='physical'?sparse(simplifyTrace(hint,6),6):hint,bendCost:mode==='physical'?72:24,ports:[{owner:wire.a.split(':')[0],origin:a,d:direction(state,wire.a,mode)},{owner:wire.b.split(':')[0],origin:b,d:direction(state,wire.b,mode)}]};
   let best=null,bestScore=null;
   for(const allowBodyCrossings of [false,true]){
     if(allowBodyCrossings&&bestScore?.[0]<eps)break;
@@ -249,7 +252,28 @@ function terminalTangents(points,state,wire,strength) {
   }
   return simplifyTrace(result,.15);
 }
-/** Relax the cable during a gesture; reduce global crossings once on release. */
+function repairPhysicalSpan(state,route,routes,nets,boxes,solids) {
+  const {wire}=route,tracks=peers(wire,routes,nets,'physical');let points=route.points;
+  // Keep the unaffected curve on both sides of an obstruction. A dense mouse
+  // trace is a shape reference, never a sequence of mandatory routing corners.
+  for(let pass=0;pass<4;pass++){
+    const blocked=new Set();bodyCost(points,solids,wire,blocked);if(!blocked.size)break;
+    const segments=[...blocked].sort((a,b)=>a-b);let last=segments[0];for(const i of segments.slice(1)){if(i>last+2)break;last=i;}
+    let start=Math.max(0,segments[0]-2),end=Math.min(points.length-1,last+1);
+    while(start>0&&boxes.some(b=>inside(points[start],inflate(b,8))))start--;
+    while(end<points.length-1&&boxes.some(b=>inside(points[end],inflate(b,8))))end++;
+    const a=points[start],b=points[end],hint=points.slice(start,end+1),ports=[];
+    if(start===0)ports.push({owner:wire.a.split(':')[0],origin:a,d:direction(state,wire.a,'physical')});
+    if(end===points.length-1)ports.push({owner:wire.b.split(':')[0],origin:b,d:direction(state,wire.b,'physical')});
+    const self=[{points:points.slice(0,start+1),shared:[a]},{points:points.slice(end),shared:[b]}].filter(t=>t.points.length>1);
+    const patch=routeOrthogonal(a,b,boxes,[...tracks,...self],{hint:sparse(simplifyTrace(hint,6),6),bendCost:72,ports,startDirection:start===0?direction(state,wire.a,'physical'):null,endDirection:end===points.length-1?direction(state,wire.b,'physical'):null});
+    if(!patch)break;
+    const before=scoreRoute(points,tracks,solids,wire),part=[rounded(patch),patch].find(part=>{const candidate=[...points.slice(0,start),...part,...points.slice(end+1)],score=scoreRoute(candidate,tracks,solids,wire);return score[0]<=before[0]+eps&&score[1]<before[1]-eps&&self.every(t=>crossingsBetween(part,t)<eps);});
+    if(!part)break;points=[...points.slice(0,start),...part,...points.slice(end+1)];
+  }
+  return points;
+}
+/** Relax during a gesture; preserve clear curves and repair collisions locally. */
 export function moveItem(state,id,pose,before,{preview=false,finalize=false,session={}}={}) {
   const item=state.components.find(c=>c.id===id)??state.junctions.find(n=>n.id===id);if(!item)return;
   Object.assign(item,pose);const attached=new Set(),physical=state.viewMode==='physical',boxes=boxesFor(state,state.viewMode),originalItem=before.components.find(c=>c.id===id)??before.junctions.find(n=>n.id===id),strength=originalItem?Math.min(1,(distance(item,originalItem)+(item.angle!==originalItem.angle?80:0))/24):1;session.faces??=new Map();
@@ -257,9 +281,14 @@ export function moveItem(state,id,pose,before,{preview=false,finalize=false,sess
     if(!physical){if(incident){attached.add(wire.id);delete wire.via;}continue;}
     let points=wirePoints(wire,k=>pointIn(state,k,'physical'),'physical');if(finalize){if(incident||!routeIsClear(points,state,wire,'physical'))attached.add(wire.id);continue;}
     const original=wirePoints(old,k=>pointIn(before,k,'physical'),'physical');points=incident?deformCable(original,pointIn(state,wire.a,'physical'),pointIn(state,wire.b,'physical')):original;
-    if(incident){attached.add(wire.id);points=terminalTangents(points,state,wire,strength);}
+    if(incident){attached.add(wire.id);if(!routeIsClear(points,state,wire,'physical'))points=terminalTangents(points,state,wire,strength);}
     if(!routeIsClear(points,state,wire,'physical')){attached.add(wire.id);points=projectCable(points,boxes,wire,session.faces);}
     wire.physicalVia=points.slice(1,-1);
+  }
+  if(physical){
+    const solids=boxesFor(state,'physical',2),nets=circuitNets(state),routes=state.wires.map(wire=>({wire,points:wirePoints(wire,k=>pointIn(state,k,'physical'),'physical')}));
+    for(const route of routes)if(bodyCost(route.points,solids,route.wire)>eps){route.points=repairPhysicalSpan(state,route,routes,nets,boxes,solids);route.wire.physicalVia=route.points.slice(1,-1);}
+    if(preview||circuitScore(routes,nets,'physical',solids).every(n=>n<eps))return;
   }
   if(preview)return;
   routeCircuit(state,state.viewMode,{ids:physical?null:attached,optimize:physical});
