@@ -1,4 +1,4 @@
-import {normalizeState} from './data.js?v=2.4';
+import {normalizeState} from './data.js?v=2.5';
 export const EXPERIMENT_FILE_FORMAT='circuit-lab-experiment';
 export function serializeExperiment(state,name){
   const normalized=normalizeState(state);if(!normalized)throw new Error('实验内容不完整，暂时无法导出。');

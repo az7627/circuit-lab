@@ -1,9 +1,9 @@
-import {lampAppearance,heaterAppearance} from './visuals.js?v=2.2';
+import {lampAppearance,heaterAppearance} from './visuals.js?v=2.5';
 export function symbol(c, {thumbnail=false,power=0,current=0,motion=true}={}) {
   const reading={power,current};
   const active=!thumbnail && Math.abs(current)>1e-8;
   if(c.type==='junction') return '<path d="M-48 0H48M0-25v50"/><circle r="8" fill="#8c70b2"/>';
-  if (c.type === 'battery') return '<path d="M-54 0h46M8 0h46M-8-24v48M8-13v26"/><text class="battery-polarity" x="-28" y="-12">+</text><text class="battery-polarity" x="24" y="-12">−</text>';
+  if (c.type === 'battery') return '<path d="M-54 0h46M8 0h46M-8-13v26M8-24v48"/><text class="battery-polarity" x="-28" y="-12">−</text><text class="battery-polarity" x="24" y="-12">+</text>';
   if(c.type==='spdt'){const upright=thumbnail?0:-(c.angle??0);return `<path d="M-54 0h27M26-24h28M26 24h28M-23 0 23 ${c.position===2?24:-24}"/><circle cx="-25" r="3"/><circle cx="25" cy="-24" r="3"/><circle cx="25" cy="24" r="3"/><text class="switch-port-label" x="-43" y="-12" transform="rotate(${upright} -43 -12)">C</text><text class="switch-port-label" x="42" y="-35" transform="rotate(${upright} 42 -35)">1</text><text class="switch-port-label" x="42" y="39" transform="rotate(${upright} 42 39)">2</text>`;}
   if (c.type === 'resistor') return '<path d="M-54 0h26m56 0h26"/><rect x="-28" y="-13" width="56" height="26" rx="2"/><path d="M-21-6h42" opacity=".16"/>';
   if(c.type==='rheostat') {const slider=thumbnail?0:-28+56*Math.max(0,Math.min(1,c.value/100));return `<path d="M-54 18h11V0h15"/><rect x="-28" y="-12" width="56" height="24" rx="2"/><path class="rheostat-slider" d="M0-54v18H${slider}v24m-5-8 5 8 5-8"/>`;}
