@@ -13,8 +13,25 @@ export function componentTerminal(c,index) {
 export function labelOffset(c) {
   if(c.type==='spdt')return c.angle%180===90?{x:-72,y:4}:{x:0,y:61};
   if(c.type==='bell') return c.angle%180===0?{x:65,y:4}:{x:0,y:48};
+  if(c.type==='rheostat'&&c.angle===180)return {x:0,y:84};
+  if(c.type==='rheostat'&&c.angle===270)return {x:-98,y:4};
   return c.angle%180===90?{x:-64,y:4}:{x:0,y:47};
 }
+/** Pointer target follows the symbol, with a small margin and no name/value labels. */
+export function componentHitBounds(c) {
+  const extents={
+    battery:[-54,-24,54,24],resistor:[-54,-13,54,13],
+    switch:[-54,c.closed?-3:-27,54,3],spdt:[-54,-27,54,27],
+    rheostat:[-54,-54,33,18],bell:[-25,-25,25,54],
+    heater:[-54,-35,54,15],capacitor:[-54,-23,54,23],
+    inductor:[-54,-19,54,0],fuse:[-54,-12,54,12]
+  }[c.type]??[-54,-26,54,26];
+  const [left,top,right,bottom]=extents,r=c.angle*Math.PI/180,points=[];
+  for(const x of [left,right])for(const y of [top,bottom])points.push({x:c.x+x*Math.cos(r)-y*Math.sin(r),y:c.y+x*Math.sin(r)+y*Math.cos(r)});
+  const x=Math.min(...points.map(p=>p.x))-4,y=Math.min(...points.map(p=>p.y))-4;
+  return {x,y,width:Math.max(...points.map(p=>p.x))+4-x,height:Math.max(...points.map(p=>p.y))+4-y};
+}
+/** Complete display bounds for camera fitting, including the name and value. */
 export function componentBounds(c) {
   const corners=c.type==='bell'?[[-28,-28],[28,0]]:c.type==='spdt'?[[-55,-44],[55,44]]:[[-55,-31],[55,31]];
   const r=c.angle*Math.PI/180,points=[];
