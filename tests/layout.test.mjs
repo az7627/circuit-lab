@@ -8,6 +8,7 @@ import {convertView,routeCircuit,routeOrthogonal,routeIsClear,pointIn,deformCabl
 import {circuitNets} from '../dist/topology.js';
 import {wirePoints} from '../dist/wiring.js';
 import {serializeExperiment,parseExperiment} from '../dist/files.js';
+import {physicalBranches} from './fixtures/physical-branches.mjs';
 
 export function regressionScene(){
   const state=createPreset('free');state.viewMode='physical';
@@ -173,12 +174,12 @@ test('releasing the screenshot battery drag preserves every clear preview point 
   assert.deepEqual(state.wires.slice(0,2),before.wires.slice(0,2));assert.deepEqual(connections(state),connections(before));assert.equal(solveCircuit(state.components,state.wires,state.junctions).current,.6);
 });
 
-test('release repairs only the obstructed span while preserving the distant hand-drawn curve',()=>{
+test('preview repairs only the obstructed span while preserving the distant hand-drawn curve',()=>{
   const state=createPreset('free');state.viewMode='physical';state.components=[component('r1','resistor',300,250)];state.junctions=[{id:'n1',x:0,y:0},{id:'n2',x:600,y:0}];
   const trace=[[50,-10],[100,-15],[150,-10],[190,0],[230,0],[270,0],[300,0],[330,0],[370,0],[410,0],[450,-10],[500,-15],[550,-10]].map(([x,y])=>({x,y}));
   state.wires=[{id:'w1',a:'n1:0',b:'n2:0',physicalVia:clone(trace)},{id:'w2',a:'r1:0',b:'n1:0',physicalVia:[{x:246,y:400},{x:-100,y:400},{x:-100,y:0}]}];const before=clone(state);state.components[0].y=0;
   assert.equal(routeIsClear(wirePoints(state.wires[0],k=>pointIn(state,k),'physical'),state,state.wires[0]),false);
-  moveItem(state,'r1',{},before,{finalize:true});const route=state.wires[0];assert.ok(routeIsClear(wirePoints(route,k=>pointIn(state,k),'physical'),state,route));
+  moveItem(state,'r1',{},before,{preview:true});const route=state.wires[0];assert.ok(routeIsClear(wirePoints(route,k=>pointIn(state,k),'physical'),state,route));
   assert.deepEqual(route.physicalVia.slice(0,3),trace.slice(0,3));assert.deepEqual(route.physicalVia.slice(-3),trace.slice(-3));assert.deepEqual(connections(state),connections(before));
 });
 
@@ -213,4 +214,26 @@ test('an unwired meter starts following its circuit after being connected in a l
   const before=clone(state);moveItem(state,'a9',{x:800,y:250},before,{preview:true,session});moveItem(state,'a9',{},before,{finalize:true,session});
   assert.notDeepEqual(state.wires.at(-1).physicalVia,before.wires.at(-1).physicalVia);assert.deepEqual(connections(state),connections(before));assert.equal(solveCircuit(state.components,state.wires,state.junctions).current,0);
   const wire=state.wires.at(-1);assert.ok(routeIsClear(wirePoints(wire,k=>pointIn(state,k),'physical'),state,wire));
+});
+
+function connectedCrossing(){const s=crossingScene();s.viewMode='physical';for(const w of s.wires)w.physicalVia=[];s.wires.push({id:'w3',a:'n2:0',b:'n4:0',physicalVia:[{x:220,y:0},{x:220,y:120},{x:100,y:120}]});return s;}
+
+test('pointer release never mutates the last rendered physical geometry, even with remaining crossings',()=>{
+  const state=connectedCrossing(),before=clone(state);assert.ok(countWireCrossings(state)>0);moveItem(state,'n1',{},before,{finalize:true});assert.deepEqual(state,before);
+});
+
+test('physical wire crossings are resolved during preview with a bounded local detour',()=>{
+  const state=connectedCrossing(),before=clone(state),session={};moveItem(state,'n1',{x:-10,y:20},before,{preview:true,session});
+  assert.equal(countWireCrossings(state),0);const preview=clone(state);moveItem(state,'n1',{},before,{finalize:true,session});assert.deepEqual(state,preview);
+  for(const {points} of paths(state))for(const p of points)assert.ok(p.x>=-140&&p.x<=340&&p.y>=-200&&p.y<=220,'a local crossing must not produce a long return loop');
+});
+
+test('the crowded two-branch circuit repairs crossings before release and retains the freehand layout',()=>{
+  const state=physicalBranches(),before=clone(state),initial=countWireCrossings(state),session={};
+  for(const pose of [{x:1240,y:480},{x:1250,y:470},{x:1200,y:490}]){
+    moveItem(state,'e1',pose,before,{preview:true,session});const preview=clone(state.wires);moveItem(state,'e1',{},before,{finalize:true,session});assert.deepEqual(state.wires,preview);
+    assert.ok(countWireCrossings(state)<initial,'preview should reduce the reported crossings');
+    for(const {points} of paths(state))for(const p of points)assert.ok(p.x>0&&p.x<1500&&p.y>-150&&p.y<950,'routing escaped the original experiment');
+  }
+  assert.deepEqual(connections(state),connections(before));assert.ok(Math.abs(solveCircuit(state.components,state.wires,state.junctions).current-.6)<1e-9);
 });

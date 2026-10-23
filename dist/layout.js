@@ -98,15 +98,17 @@ class Heap {
 function sparse(points,max=12) {if(points.length<=max)return points;const out=[];for(let i=0;i<max;i++)out.push(points[Math.round(i*(points.length-1)/(max-1))]);return out;}
 
 /** Lexicographic A*: crossings, then component penetration, then shape and length. */
-export function routeOrthogonal(start,end,boxes=[],tracks=[],{startDirection=null,endDirection=null,hint=[],allowBodyCrossings=false,ports=[],bendCost=24}={}) {
-  tracks=trackList(tracks);const xs=[start.x,end.x],ys=[start.y,end.y],margin=180;
+export function routeOrthogonal(start,end,boxes=[],tracks=[],{startDirection=null,endDirection=null,hint=[],allowBodyCrossings=false,ports=[],bendCost=24,localMargin=null}={}) {
+  tracks=trackList(tracks);const xs=[start.x,end.x],ys=[start.y,end.y],margin=localMargin??180;
   const region={x:Math.min(start.x,end.x,...hint.map(p=>p.x))-margin,y:Math.min(start.y,end.y,...hint.map(p=>p.y))-margin};region.width=Math.max(start.x,end.x,...hint.map(p=>p.x))-region.x+margin;region.height=Math.max(start.y,end.y,...hint.map(p=>p.y))-region.y+margin;
   // A long existing lead must be bypassable at its ends, even beyond the local window.
-  for(const track of tracks){const tx=Math.min(...track.points.map(p=>p.x)),ty=Math.min(...track.points.map(p=>p.y)),right=Math.max(...track.points.map(p=>p.x)),bottom=Math.max(...track.points.map(p=>p.y));if(!overlap(inflate({x:tx,y:ty,width:right-tx,height:bottom-ty},1),region))continue;const x=Math.min(region.x,tx-28),y=Math.min(region.y,ty-28);region.width=Math.max(region.x+region.width,right+28)-x;region.height=Math.max(region.y+region.height,bottom+28)-y;region.x=x;region.y=y;}
+  if(localMargin===null)for(const track of tracks){const tx=Math.min(...track.points.map(p=>p.x)),ty=Math.min(...track.points.map(p=>p.y)),right=Math.max(...track.points.map(p=>p.x)),bottom=Math.max(...track.points.map(p=>p.y));if(!overlap(inflate({x:tx,y:ty,width:right-tx,height:bottom-ty},1),region))continue;const x=Math.min(region.x,tx-28),y=Math.min(region.y,ty-28);region.width=Math.max(region.x+region.width,right+28)-x;region.height=Math.max(region.y+region.height,bottom+28)-y;region.x=x;region.y=y;}
+  else tracks=tracks.flatMap(track=>{const chunks=[];let chunk=null;for(let i=1;i<track.points.length;i++){if(!clipSegment(track.points[i-1],track.points[i],inflate(region,1))){chunk=null;continue;}if(!chunk){chunk={points:[track.points[i-1]],shared:track.shared};chunks.push(chunk);}chunk.points.push(track.points[i]);}return chunks;});
   const nearby=boxes.filter(b=>overlap(b,region));for(const b of nearby){xs.push(b.x-2,b.x+b.width+2);ys.push(b.y-2,b.y+b.height+2);}
   for(const p of sparse(hint,16)){xs.push(p.x);ys.push(p.y);}
   for(const track of tracks)for(const p of sparse(simplifyTrace(track.points,3),8))if(p.x>=region.x&&p.x<=region.x+region.width&&p.y>=region.y&&p.y<=region.y+region.height){xs.push(p.x-14,p.x+14);ys.push(p.y-14,p.y+14);}
   xs.push(region.x,region.x+region.width);ys.push(region.y,region.y+region.height);
+  if(localMargin!==null){for(let i=xs.length-1;i>=0;i--)if(xs[i]<region.x||xs[i]>region.x+region.width)xs.splice(i,1);for(let i=ys.length-1;i>=0;i--)if(ys[i]<region.y||ys[i]>region.y+region.height)ys.splice(i,1);}
   const unique=values=>[...new Set(values.map(v=>Math.round(v*1e4)/1e4))].sort((a,b)=>a-b),cap=(values,a,b)=>{const sorted=unique(values),selected=sorted.length<=100?sorted:unique([a,b,...sparse(sorted,96)]);return [...new Set(selected.map(v=>Math.abs(v-a)<.0001?a:Math.abs(v-b)<.0001?b:v))];},x=cap(xs,start.x,end.x),y=cap(ys,start.y,end.y),nx=x.length,ny=y.length;
   const near=(values,n)=>values.findIndex(v=>Math.abs(v-n)<.0001),sx=near(x,start.x),sy=near(y,start.y),ex=near(x,end.x),ey=near(y,end.y),encode=(xi,yi,dir)=>(yi*nx+xi)*3+dir;
   const size=nx*ny*3,g=Array.from({length:3},()=>new Float64Array(size).fill(Infinity)),previous=new Int32Array(size).fill(-1),visited=new Uint8Array(size),costs=new Map(),heap=new Heap(),first=encode(sx,sy,0);
@@ -252,12 +254,12 @@ function terminalTangents(points,state,wire,strength) {
   }
   return simplifyTrace(result,.15);
 }
-function repairPhysicalSpan(state,route,routes,nets,boxes,solids) {
+function repairPhysicalSpan(state,route,routes,nets,boxes,solids,{crossings=false}={}) {
   const {wire}=route,tracks=peers(wire,routes,nets,'physical');let points=route.points;
   // Keep the unaffected curve on both sides of an obstruction. A dense mouse
   // trace is a shape reference, never a sequence of mandatory routing corners.
   for(let pass=0;pass<4;pass++){
-    const blocked=new Set();bodyCost(points,solids,wire,blocked);if(!blocked.size)break;
+    const blocked=new Set();bodyCost(points,solids,wire,blocked);if(crossings)for(let i=1;i<points.length;i++)if(tracks.some(t=>crosses(points[i-1],points[i],t)>eps))blocked.add(i);if(!blocked.size)break;
     const segments=[...blocked].sort((a,b)=>a-b);let last=segments[0];for(const i of segments.slice(1)){if(i>last+2)break;last=i;}
     let start=Math.max(0,segments[0]-2),end=Math.min(points.length-1,last+1);
     while(start>0&&boxes.some(b=>inside(points[start],inflate(b,8))))start--;
@@ -266,12 +268,24 @@ function repairPhysicalSpan(state,route,routes,nets,boxes,solids) {
     if(start===0)ports.push({owner:wire.a.split(':')[0],origin:a,d:direction(state,wire.a,'physical')});
     if(end===points.length-1)ports.push({owner:wire.b.split(':')[0],origin:b,d:direction(state,wire.b,'physical')});
     const self=[{points:points.slice(0,start+1),shared:[a]},{points:points.slice(end),shared:[b]}].filter(t=>t.points.length>1);
-    const patch=routeOrthogonal(a,b,boxes,[...tracks,...self],{hint:sparse(simplifyTrace(hint,6),6),bendCost:72,ports,startDirection:start===0?direction(state,wire.a,'physical'):null,endDirection:end===points.length-1?direction(state,wire.b,'physical'):null});
-    if(!patch)break;
-    const before=scoreRoute(points,tracks,solids,wire),part=[rounded(patch),patch].find(part=>{const candidate=[...points.slice(0,start),...part,...points.slice(end+1)],score=scoreRoute(candidate,tracks,solids,wire);return score[0]<=before[0]+eps&&score[1]<before[1]-eps&&self.every(t=>crossingsBetween(part,t)<eps);});
+    const patch=routeOrthogonal(a,b,boxes,[...tracks,...self],{hint:sparse(simplifyTrace(hint,6),6),bendCost:90,localMargin:96,ports,startDirection:start===0?direction(state,wire.a,'physical'):null,endDirection:end===points.length-1?direction(state,wire.b,'physical'):null});
+    if(!patch||patch.length>8||lengthOf(patch)>lengthOf(hint)*1.5+144||patch.some(p=>traceDistance(p,hint)>128))break;
+    const before=scoreRoute(points,tracks,solids,wire),part=[rounded(patch,18),patch].find(part=>{const candidate=[...points.slice(0,start),...part,...points.slice(end+1)],score=scoreRoute(candidate,tracks,solids,wire),improves=crossings?score[0]<before[0]-eps&&score[1]<=before[1]+eps:score[0]<=before[0]+eps&&score[1]<before[1]-eps;return improves&&self.every(t=>crossingsBetween(part,t)<eps);});
     if(!part)break;points=[...points.slice(0,start),...part,...points.slice(end+1)];
   }
   return points;
+}
+function repairPhysicalCrossings(state,routes,nets,boxes,solids) {
+  let quality=circuitScore(routes,nets,'physical',solids),attempts=0;
+  for(let pass=0;pass<3&&quality[0]>eps;pass++){
+    let best=null;
+    for(const route of routes){if(attempts>=6)break;const tracks=peers(route.wire,routes,nets,'physical');if(tracks.every(t=>crossingsBetween(route.points,t)<eps))continue;attempts++;
+      const old=route.points,candidate=repairPhysicalSpan(state,route,routes,nets,boxes,solids,{crossings:true});if(candidate===old)continue;
+      route.points=candidate;const score=circuitScore(routes,nets,'physical',solids);route.points=old;
+      const change=scoreRoute(candidate,[],solids,route.wire,old)[2]-lengthOf(old);if(score[0]<quality[0]-eps&&score[1]<=quality[1]+eps&&(!best||compare([...score,change],best.score)<0))best={route,points:candidate,score:[...score,change]};
+    }
+    if(!best)break;best.route.points=best.points;quality=best.score.slice(0,2);
+  }
 }
 function movementCircuit(state,id,before,session) {
   const cached=session.circuit;if(cached?.state===state&&cached.before===before&&cached.id===id&&cached.mode===state.viewMode)return cached.scope;
@@ -285,22 +299,24 @@ function movementCircuit(state,id,before,session) {
 }
 /** Relax only the moving item's circuit; unrelated circuits retain their traces. */
 export function moveItem(state,id,pose,before,{preview=false,finalize=false,session={}}={}) {
+  // Pointer release commits the last rendered preview, including its exact trace.
+  if(finalize)return;
   const item=state.components.find(c=>c.id===id)??state.junctions.find(n=>n.id===id);if(!item)return;
   Object.assign(item,pose);state=movementCircuit(state,id,before,session);if(!state)return;
   const attached=new Set(),physical=state.viewMode==='physical',boxes=boxesFor(state,state.viewMode),originalItem=before.components.find(c=>c.id===id)??before.junctions.find(n=>n.id===id),strength=originalItem?Math.min(1,(distance(item,originalItem)+(item.angle!==originalItem.angle?80:0))/24):1;session.faces??=new Map();
   for(const wire of state.wires){const incident=wire.a.split(':')[0]===id||wire.b.split(':')[0]===id,old=before.wires.find(w=>w.id===wire.id);if(!old)continue;
     if(!physical){if(incident){attached.add(wire.id);delete wire.via;}continue;}
-    let points=wirePoints(wire,k=>pointIn(state,k,'physical'),'physical');if(finalize){if(incident||!routeIsClear(points,state,wire,'physical'))attached.add(wire.id);continue;}
+    let points=wirePoints(wire,k=>pointIn(state,k,'physical'),'physical');
     const original=wirePoints(old,k=>pointIn(before,k,'physical'),'physical');points=incident?deformCable(original,pointIn(state,wire.a,'physical'),pointIn(state,wire.b,'physical')):original;
     if(incident){attached.add(wire.id);if(!routeIsClear(points,state,wire,'physical'))points=terminalTangents(points,state,wire,strength);}
-    if(!routeIsClear(points,state,wire,'physical')){attached.add(wire.id);points=projectCable(points,boxes,wire,session.faces);}
     wire.physicalVia=points.slice(1,-1);
   }
   if(physical){
     const solids=boxesFor(state,'physical',2),nets=circuitNets(state),routes=state.wires.map(wire=>({wire,points:wirePoints(wire,k=>pointIn(state,k,'physical'),'physical')}));
-    for(const route of routes)if(bodyCost(route.points,solids,route.wire)>eps){route.points=repairPhysicalSpan(state,route,routes,nets,boxes,solids);route.wire.physicalVia=route.points.slice(1,-1);}
-    if(preview||circuitScore(routes,nets,'physical',solids).every(n=>n<eps))return;
+    for(const route of routes)if(bodyCost(route.points,solids,route.wire)>eps){route.points=repairPhysicalSpan(state,route,routes,nets,boxes,solids);if(bodyCost(route.points,solids,route.wire)>eps)route.points=projectCable(route.points,boxes,route.wire,session.faces);route.wire.physicalVia=route.points.slice(1,-1);}
+    repairPhysicalCrossings(state,routes,nets,boxes,solids);for(const route of routes)route.wire.physicalVia=route.points.slice(1,-1);
+    return;
   }
   if(preview)return;
-  routeCircuit(state,state.viewMode,{ids:physical?null:attached,optimize:physical});
+  routeCircuit(state,state.viewMode,{ids:attached});
 }
