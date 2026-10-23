@@ -273,10 +273,21 @@ function repairPhysicalSpan(state,route,routes,nets,boxes,solids) {
   }
   return points;
 }
-/** Relax during a gesture; preserve clear curves and repair collisions locally. */
+function movementCircuit(state,id,before,session) {
+  const cached=session.circuit;if(cached?.state===state&&cached.before===before&&cached.id===id&&cached.mode===state.viewMode)return cached.scope;
+  // Connectivity is structural: all posts of a part belong to its circuit,
+  // including an open switch or a meter. Proximity never joins two circuits.
+  const adjacent=new Map();for(const wire of state.wires){const a=wire.a.split(':')[0],b=wire.b.split(':')[0];if(!adjacent.has(a))adjacent.set(a,[]);if(!adjacent.has(b))adjacent.set(b,[]);adjacent.get(a).push(b);adjacent.get(b).push(a);}
+  const members=new Set([id]),queue=[id];for(const item of queue)for(const next of adjacent.get(item)??[])if(!members.has(next)){members.add(next);queue.push(next);}
+  const wires=state.wires.filter(w=>members.has(w.a.split(':')[0])),scope=wires.length?{...state,components:state.components.filter(c=>members.has(c.id)),junctions:state.junctions.filter(n=>members.has(n.id)),wires}:null;
+  // The gesture's snapshot fixes its topology; reuse membership on each frame.
+  session.circuit={state,before,id,mode:state.viewMode,scope};return scope;
+}
+/** Relax only the moving item's circuit; unrelated circuits retain their traces. */
 export function moveItem(state,id,pose,before,{preview=false,finalize=false,session={}}={}) {
   const item=state.components.find(c=>c.id===id)??state.junctions.find(n=>n.id===id);if(!item)return;
-  Object.assign(item,pose);const attached=new Set(),physical=state.viewMode==='physical',boxes=boxesFor(state,state.viewMode),originalItem=before.components.find(c=>c.id===id)??before.junctions.find(n=>n.id===id),strength=originalItem?Math.min(1,(distance(item,originalItem)+(item.angle!==originalItem.angle?80:0))/24):1;session.faces??=new Map();
+  Object.assign(item,pose);state=movementCircuit(state,id,before,session);if(!state)return;
+  const attached=new Set(),physical=state.viewMode==='physical',boxes=boxesFor(state,state.viewMode),originalItem=before.components.find(c=>c.id===id)??before.junctions.find(n=>n.id===id),strength=originalItem?Math.min(1,(distance(item,originalItem)+(item.angle!==originalItem.angle?80:0))/24):1;session.faces??=new Map();
   for(const wire of state.wires){const incident=wire.a.split(':')[0]===id||wire.b.split(':')[0]===id,old=before.wires.find(w=>w.id===wire.id);if(!old)continue;
     if(!physical){if(incident){attached.add(wire.id);delete wire.via;}continue;}
     let points=wirePoints(wire,k=>pointIn(state,k,'physical'),'physical');if(finalize){if(incident||!routeIsClear(points,state,wire,'physical'))attached.add(wire.id);continue;}

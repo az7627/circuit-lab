@@ -129,10 +129,10 @@ test('small physical drag steps change the cable continuously and returning rest
   moveItem(state,'l1',{x:100,y:100},before,{preview:true,session});assert.deepEqual(state.wires[0].physicalVia,before.wires[0].physicalVia);
 });
 
-test('moving an unrelated physical component also moves cables away from its body',()=>{
+test('an unwired meter crossing a wire leaves its trace unchanged during dragging and release',()=>{
   const state=createPreset('free');state.viewMode='physical';state.components=[component('l1','lamp',0,0),component('l2','lamp',400,0),component('v1','voltmeter',200,-180)];state.wires=[{id:'w1',a:'l1:1',b:'l2:0',physicalVia:[]}];const before=clone(state),session={};
-  for(let y=-180;y<=0;y+=5)moveItem(state,'v1',{x:200,y},before,{preview:true,session});moveItem(state,'v1',{},before,{finalize:true,session});
-  assert.ok(routeIsClear(wirePoints(state.wires[0],k=>pointIn(state,k),'physical'),state,state.wires[0]));assert.deepEqual(connections(state),connections(before));
+  for(let y=-180;y<=180;y+=5){moveItem(state,'v1',{x:200,y},before,{preview:true,session});assert.deepEqual(state.wires,before.wires);}
+  moveItem(state,'v1',{},before,{finalize:true,session});assert.deepEqual(state.wires,before.wires);assert.equal(state.components[2].y,180);
 });
 
 test('bridge networks, multiple supplies and both SPDT throws survive general graph conversion',()=>{
@@ -176,8 +176,41 @@ test('releasing the screenshot battery drag preserves every clear preview point 
 test('release repairs only the obstructed span while preserving the distant hand-drawn curve',()=>{
   const state=createPreset('free');state.viewMode='physical';state.components=[component('r1','resistor',300,250)];state.junctions=[{id:'n1',x:0,y:0},{id:'n2',x:600,y:0}];
   const trace=[[50,-10],[100,-15],[150,-10],[190,0],[230,0],[270,0],[300,0],[330,0],[370,0],[410,0],[450,-10],[500,-15],[550,-10]].map(([x,y])=>({x,y}));
-  state.wires=[{id:'w1',a:'n1:0',b:'n2:0',physicalVia:clone(trace)}];const before=clone(state);state.components[0].y=0;
+  state.wires=[{id:'w1',a:'n1:0',b:'n2:0',physicalVia:clone(trace)},{id:'w2',a:'r1:0',b:'n1:0',physicalVia:[{x:246,y:400},{x:-100,y:400},{x:-100,y:0}]}];const before=clone(state);state.components[0].y=0;
   assert.equal(routeIsClear(wirePoints(state.wires[0],k=>pointIn(state,k),'physical'),state,state.wires[0]),false);
   moveItem(state,'r1',{},before,{finalize:true});const route=state.wires[0];assert.ok(routeIsClear(wirePoints(route,k=>pointIn(state,k),'physical'),state,route));
   assert.deepEqual(route.physicalVia.slice(0,3),trace.slice(0,3));assert.deepEqual(route.physicalVia.slice(-3),trace.slice(-3));assert.deepEqual(connections(state),connections(before));
+});
+
+test('moving an unattached ammeter or junction across a closed loop preserves all wires in either view',()=>{
+  for(const mode of ['physical','schematic'])for(const id of ['a9','n9']){
+    const state=releaseScene();if(mode==='schematic')convertView(state,mode);
+    state.components.push(component('a9','ammeter',800,0));state.junctions.push({id:'n9',x:800,y:0});const before=clone(state),session={};
+    for(let i=1;i<=40;i++){moveItem(state,id,{x:800-900*i/40,y:500*i/40},before,{preview:true,session});assert.deepEqual(state.wires,before.wires,`${mode} ${id} step ${i}`);}
+    moveItem(state,id,{},before,{finalize:true,session});assert.deepEqual(state.wires,before.wires);
+    const moved=clone(state);moveItem(state,id,{x:300,y:100,...(id==='a9'?{angle:90}:{})},moved);assert.deepEqual(state.wires,before.wires);
+    assert.equal(solveCircuit(state.components,state.wires,state.junctions).current,.6);
+  }
+});
+
+test('dragging a wired component routes only its connected group and ignores another circuit',()=>{
+  const state=releaseScene(),otherWires=clone(state.wires),own=createPreset('free');own.viewMode='physical';
+  own.components=[component('r9','resistor',900,80),component('r10','resistor',950,450)];own.wires=[{id:'w9',a:'r9:1',b:'r10:0',physicalVia:[{x:1000,y:100},{x:1040,y:220},{x:1040,y:380},{x:1000,y:450}]}];
+  state.components.push(...clone(own.components));state.wires.push(...clone(own.wires));const before=clone(state),ownBefore=clone(own),session={},ownSession={};
+  for(let i=1;i<=30;i++){
+    const pose={x:900-750*i/30,y:80+370*i/30};moveItem(state,'r9',pose,before,{preview:true,session});moveItem(own,'r9',pose,ownBefore,{preview:true,session:ownSession});
+    assert.deepEqual(state.wires.slice(0,4),otherWires,`step ${i}`);assert.deepEqual(state.wires[4],own.wires[0],`foreign obstacles affected step ${i}`);
+  }
+  moveItem(state,'r9',{},before,{finalize:true,session});moveItem(own,'r9',{},ownBefore,{finalize:true,session:ownSession});
+  assert.deepEqual(state.wires.slice(0,4),otherWires);assert.deepEqual(state.wires[4],own.wires[0]);assert.notDeepEqual(own.wires[0],ownBefore.wires[0]);
+  assert.ok(routeIsClear(wirePoints(own.wires[0],k=>pointIn(own,k),'physical'),own,own.wires[0]));
+});
+
+test('an unwired meter starts following its circuit after being connected in a later gesture',()=>{
+  const state=releaseScene(),session={};state.components.push(component('a9','ammeter',800,0));
+  moveItem(state,'a9',{x:410,y:200},clone(state),{preview:true,session});
+  state.components.find(c=>c.id==='s1').closed=false;state.wires.push({id:'w9',a:'a9:1',b:'s1:0',physicalVia:[{x:330,y:250},{x:180,y:250},{x:100,y:180}]});
+  const before=clone(state);moveItem(state,'a9',{x:800,y:250},before,{preview:true,session});moveItem(state,'a9',{},before,{finalize:true,session});
+  assert.notDeepEqual(state.wires.at(-1).physicalVia,before.wires.at(-1).physicalVia);assert.deepEqual(connections(state),connections(before));assert.equal(solveCircuit(state.components,state.wires,state.junctions).current,0);
+  const wire=state.wires.at(-1);assert.ok(routeIsClear(wirePoints(wire,k=>pointIn(state,k),'physical'),state,wire));
 });
