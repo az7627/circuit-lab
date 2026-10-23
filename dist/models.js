@@ -19,23 +19,23 @@ export function createPreset(name,records=[]) {
   let components = [], wires = [], junctions = [];
   const w = (a, b, via) => wires.push({ id: `w${wires.length + 1}`, a, b, ...(via ? { via } : {}) });
   if (name === 'series') {
-    components = [component('e1', 'battery', 145, 260, 6, 90), component('s1', 'switch', 325, 135), component('l1', 'lamp', 605, 135), component('r1', 'resistor', 605, 370, 10, 180), component('a1', 'ammeter', 325, 370, 0, 180), component('v1', 'voltmeter', 605, 255)];
+    components = [component('e1', 'battery', 145, 260, 6, 270), component('s1', 'switch', 325, 135), component('l1', 'lamp', 605, 135), component('r1', 'resistor', 605, 370, 10, 180), component('a1', 'ammeter', 325, 370, 0, 180), component('v1', 'voltmeter', 605, 255)];
     w('e1:0', 's1:0', [{ x: 145, y: 135 }]); w('s1:1', 'l1:0');
     w('l1:1', 'r1:0', [{ x: 730, y: 135 }, { x: 730, y: 370 }]); w('r1:1', 'a1:0'); w('a1:1', 'e1:1', [{ x: 145, y: 370 }]);
     w('l1:0', 'v1:0', [{ x: 505, y: 135 }, { x: 505, y: 255 }]); w('l1:1', 'v1:1', [{ x: 700, y: 135 }, { x: 700, y: 255 }]);
   } else if (name === 'parallel') {
-    components = [component('e1','battery',145,270,6,90),component('s1','switch',200,120),component('a1','ammeter',360,120),component('l1','lamp',565,300,10),component('l2','lamp',565,400,10),component('v1','voltmeter',565,200)];
+    components = [component('e1','battery',145,270,6,270),component('s1','switch',200,120),component('a1','ammeter',360,120),component('l1','lamp',565,300,10),component('l2','lamp',565,400,10),component('v1','voltmeter',565,200)];
     junctions=[{id:'n1',x:440,y:200},{id:'n2',x:690,y:200},{id:'n3',x:440,y:300},{id:'n4',x:690,y:300},{id:'n5',x:440,y:400},{id:'n6',x:690,y:400}];
     w('e1:0','s1:0',[{x:145,y:120}]);w('s1:1','a1:0');w('a1:1','n1:0',[{x:440,y:120}]);
     w('n1:0','n3:0');w('n3:0','n5:0');w('n2:0','n4:0');w('n4:0','n6:0');
     w('n6:0','e1:1',[{x:690,y:455},{x:145,y:455}]);
     w('n1:0','v1:0');w('v1:1','n2:0');w('n3:0','l1:0');w('l1:1','n4:0');w('n5:0','l2:0');w('l2:1','n6:0');
   } else if (name === 'ohm') {
-    components = [component('e1', 'battery', 145, 260, 6, 90), component('s1', 'switch', 325, 135), component('a1', 'ammeter', 605, 135), component('r1', 'resistor', 605, 370, 20, 180), component('v1', 'voltmeter', 605, 255, 0, 180)];
+    components = [component('e1', 'battery', 145, 260, 6, 270), component('s1', 'switch', 325, 135), component('a1', 'ammeter', 605, 135), component('r1', 'resistor', 605, 370, 20, 180), component('v1', 'voltmeter', 605, 255, 0, 180)];
     w('e1:0', 's1:0', [{ x: 145, y: 135 }]); w('s1:1', 'a1:0');
     w('a1:1', 'r1:0', [{ x: 730, y: 135 }, { x: 730, y: 370 }]); w('r1:1', 'e1:1', [{ x: 145, y: 370 }]);
     w('r1:1', 'v1:1', [{ x: 505, y: 370 }, { x: 505, y: 255 }]); w('r1:0', 'v1:0', [{ x: 700, y: 370 }, { x: 700, y: 255 }]);
   }
-  return { preset: name, components, wires, junctions, running: true, showCurrent: true, records, nextId: 20,viewModelVersion:2,viewMode:'schematic' };
+  return { preset: name, components, wires, junctions, running: true, showCurrent: true, records, nextId: 20,viewModelVersion:2,viewMode:'schematic',routingVersion:1 };
 }
 

@@ -4,7 +4,7 @@
  * have infinite resistance. A voltage supernode formulation avoids the
  * singular matrices caused by open circuits and floating components.
  */
-import {terminalIndices,contactIndex} from './terminals.js?v=2.2';
+import {terminalIndices,contactIndex} from './terminals.js?v=2.6';
 const TYPES = new Set(['battery','resistor','lamp','switch','spdt','ammeter','voltmeter','rheostat','motor','bell','buzzer','heater','capacitor','inductor','fuse']);
 const RESISTIVE_TYPES = new Set(['resistor','lamp','rheostat','motor','bell','buzzer','heater']);
 const resistanceOf = (component) => component.type === 'fuse' ? 0.2 : component.value;
@@ -169,6 +169,11 @@ export function solveCircuit(components, wires, junctions = []) {
     wireEdges.push({ a, b, weight: 1, wireId: wire.id });
   }
   for (const component of components) {
+    if(component.type==='ammeter'||component.type==='voltmeter'){
+      const low=wires.some(w=>w.a===`${component.id}:2`||w.b===`${component.id}:2`),high=wires.some(w=>w.a===`${component.id}:0`||w.b===`${component.id}:0`);
+      if(low&&high)return invalid('同一电表的两个正接线柱不能同时接线，请选择一个量程。');
+      const a=terminals.get(`${component.id}:0`),b=terminals.get(`${component.id}:2`);union.join(a,b);wireEdges.push({a,b,weight:1});
+    }
     if ((component.type === 'switch' && component.closed) || component.type === 'spdt' || component.type === 'inductor') {
       const a = terminals.get(`${component.id}:0`), b = terminals.get(`${component.id}:${contactIndex(component)}`);
       union.join(a, b);

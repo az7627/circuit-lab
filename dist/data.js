@@ -1,6 +1,6 @@
-import {definitions} from './models.js?v=2.4';
-import {upgradeStoredState} from './visuals.js?v=2.2';
-import {terminalIndices} from './terminals.js?v=2.2';
+import {definitions} from './models.js?v=2.6';
+import {upgradeStoredState} from './visuals.js?v=2.6';
+import {terminalIndices} from './terminals.js?v=2.6';
 export const clone=value=>JSON.parse(JSON.stringify(value));
 export function normalizeState(input){
   if(!input||typeof input!=='object')return null;
@@ -22,6 +22,15 @@ export function normalizeState(input){
   d.nextId=Math.max(d.nextId,...d.junctions.map(n=>Number(n.id.slice(1))+1));
   d.preset=['series','parallel','ohm','free'].includes(d.preset)?d.preset:'free';d.running=true;d.showCurrent=d.showCurrent!==false;
   d.viewMode=d.viewMode==='physical'?'physical':'schematic';
+  if(d.layouts!==undefined){
+    if(!d.layouts||typeof d.layouts!=='object'||Array.isArray(d.layouts))return null;
+    const layouts={};for(const mode of ['schematic','physical']){const layout=d.layouts[mode];if(!layout)continue;if(!layout.poses||typeof layout.poses!=='object'||Array.isArray(layout.poses)||Object.keys(layout.poses).length>700)return null;
+      const poses={};for(const [id,p] of Object.entries(layout.poses)){if(!ids.has(id))continue;if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||(p.angle!==undefined&&![0,90,180,270].includes(p.angle)))return null;poses[id]={x:p.x,y:p.y,...(p.angle!==undefined?{angle:p.angle}:{})};}
+      if(layout.version!==undefined&&(!Number.isSafeInteger(layout.version)||layout.version<1||layout.version>2))return null;
+      if(layout.signature!==undefined&&(typeof layout.signature!=='string'||layout.signature.length>200000))return null;
+      const view=layout.view;if(view&&(!Number.isFinite(view.x)||!Number.isFinite(view.y)||!Number.isFinite(view.zoom)||view.zoom<=0||view.zoom>5))return null;layouts[mode]={poses,...(layout.version!==undefined?{version:layout.version}:{}),...(layout.signature!==undefined?{signature:layout.signature}:{}),...(view?{view:{x:view.x,y:view.y,zoom:view.zoom}}:{})};
+    }d.layouts=layouts;
+  }
   const view=d.view;
   d.view=view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0?{x:view.x,y:view.y,zoom:Math.min(5,view.zoom)}:{x:420,y:255,zoom:1};
   return d;

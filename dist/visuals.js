@@ -1,13 +1,15 @@
 /** Symbol geometry and bounded display helpers, independent of selection state. */
-import {terminalIndices} from './terminals.js?v=2.2';
-export function terminalOffset(type,index) {
+import {terminalIndices} from './terminals.js?v=2.6';
+export function terminalOffset(type,index,mode='schematic') {
+  if(type==='battery')return {x:index===0?54:-54,y:0};
+  if(type==='ammeter'||type==='voltmeter')return mode==='physical'?{x:index===1?-32:index===2?0:32,y:34}:{x:index===1?-54:54,y:0};
   if(type==='spdt')return index===0?{x:-54,y:0}:{x:54,y:index===1?-24:24};
   if(type==='rheostat') return index===0?{x:-54,y:18}:{x:0,y:-54};
   if(type==='bell') return {x:index===0?-14:14,y:54};
   return {x:index===0?-54:54,y:0};
 }
-export function componentTerminal(c,index) {
-  const p=terminalOffset(c.type,index),r=c.angle*Math.PI/180;
+export function componentTerminal(c,index,mode='schematic') {
+  const p=terminalOffset(c.type,index,mode),r=c.angle*Math.PI/180;
   return {x:c.x+p.x*Math.cos(r)-p.y*Math.sin(r),y:c.y+p.x*Math.sin(r)+p.y*Math.cos(r)};
 }
 export function labelOffset(c) {
