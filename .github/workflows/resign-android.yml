@@ -1,0 +1,42 @@
+name: Re-sign v2.8.2 Android assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  resign:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+      - run: sdkmanager 'build-tools;36.0.0'
+      - name: Restore existing release key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/circuit-lab-resign.jks"
+          printf 'ANDROID_KEYSTORE_FILE=%s/circuit-lab-resign.jks\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Verify v2.9.0 public key, re-sign and replace only Android assets
+        run: node scripts/resign-android-2.8.2.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_RELEASE_PUBLIC_KEY: ${{ secrets.ANDROID_RELEASE_PUBLIC_KEY }}
+          ANDROID_RELEASE_CERT_SHA256: ${{ secrets.ANDROID_RELEASE_CERT_SHA256 }}
+      - name: Remove temporary private key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/circuit-lab-resign.jks"
