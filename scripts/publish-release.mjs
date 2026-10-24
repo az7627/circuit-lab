@@ -13,8 +13,13 @@ function gh(args) {
 }
 
 export function findRelease(repository, tag) {
-  const result = gh(['api', `repos/${repository}/releases?per_page=100`, '--paginate', '--jq', `.[] | select(.tag_name == ${JSON.stringify(tag)})`]);
-  return result ? JSON.parse(result) : undefined;
+  try {
+    const { apiUrl } = JSON.parse(gh(['release', 'view', tag, '--repo', repository, '--json', 'apiUrl']));
+    return JSON.parse(gh(['api', apiUrl]));
+  } catch (error) {
+    if (/release not found|HTTP 404/i.test(error.stderr || '')) return undefined;
+    throw error;
+  }
 }
 
 async function main() {
@@ -40,8 +45,9 @@ async function main() {
     return;
   }
   if (!existing) {
-    gh(['release', 'create', tag, '--repo', repository, '--verify-tag', '--draft', '--target', sha, '--title', `Circuit Lab ${tag}`, '--generate-notes']);
-    existing = findRelease(repository, tag);
+    existing = JSON.parse(gh(['api', `repos/${repository}/releases`, '--method', 'POST',
+      '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=Circuit Lab ${tag}`,
+      '-F', 'draft=true', '-F', 'generate_release_notes=true']));
   }
   if (!existing?.draft) throw new Error('无法读取 Release 草稿，拒绝上传附件。');
   names.push('SHA256SUMS.txt');
