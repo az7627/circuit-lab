@@ -3,10 +3,18 @@ import {test} from 'node:test';
 import {createPreset,component} from '../dist/models.js';
 import {solveCircuit} from '../dist/solver.js';
 import {normalizeState} from '../dist/data.js';
-import {ExperimentStore,EXPERIMENTS_KEY} from '../dist/experiments.js';
+import {ExperimentStore,EXPERIMENTS_KEY,normalizeCollection} from '../dist/experiments.js';
 import {panCamera,viewportGeometry,heaterAppearance,feedbackLevel} from '../dist/visuals.js';
 import {bellLevel} from '../dist/audio.js';
 class MemoryStorage{constructor(){this.values=new Map();this.fail=false;}getItem(k){return this.values.get(k)??null;}setItem(k,v){if(this.fail)throw new Error('QuotaExceeded');this.values.set(k,v);}}
+
+test('appearance defaults to the system and explicit choices survive reload and backup normalization',()=>{
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage);
+  assert.equal(store.data.settings.theme,'system');
+  for(const theme of ['light','dark','system']){store.settings({theme});assert.equal(new ExperimentStore(storage).data.settings.theme,theme);assert.equal(normalizeCollection(JSON.parse(storage.getItem(EXPERIMENTS_KEY))).settings.theme,theme);}
+  const old=JSON.parse(storage.getItem(EXPERIMENTS_KEY));delete old.settings.theme;assert.equal(normalizeCollection(old).settings.theme,'system');
+  old.settings.theme='invalid';assert.equal(normalizeCollection(old).settings.theme,'system');
+});
 test('a saved experiment with two series cells reloads and reports the pack voltage and loop current',()=>{
   const state=createPreset('free');state.components=[component('e1','battery',100,100,1.5),component('e2','battery',250,100,1.5),component('r1','resistor',400,100,10)];state.wires=[{id:'w1',a:'e1:1',b:'e2:0'},{id:'w2',a:'e2:1',b:'r1:1'},{id:'w3',a:'r1:0',b:'e1:0'}];
   const storage=new MemoryStorage(),store=new ExperimentStore(storage);store.save(state,'两节电池串联');

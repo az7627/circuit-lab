@@ -1,5 +1,6 @@
 export const icons = {
   circuit: '<path d="M4 7h7V3m0 4h9v10h-9v4m0-4H4V7m4-3v6m0 4v6"/><circle cx="16" cy="12" r="2"/>',
+  cube: '<path d="m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 10 9-5M12 13 3 8m9 5v8"/>',
   flask: '<path d="M9 3h6m-5 0v6l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 14h8"/><path d="m10 17 1 1m3-2h.01"/>',
   book: '<path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1v15"/><path d="M6 8h3m6 0h3M6 12h3m6 0h3"/>',
   notebook: '<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M3 7h4m-4 5h4m-4 5h4m4-10h5m-5 5h5m-5 5h3"/>',
@@ -20,6 +21,10 @@ export const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>', rotate: '<path d="M20 9a8 8 0 1 0-2 9M20 3v6h-6"/>',
   junction: '<path d="M3 12h7m4 0h7M12 3v7m0 4v7"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
   fit:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M2 8V2h6m8 0h6v6M2 16v6h6m8 0h6v-6"/>',
-  collapse:'<path d="M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5"/>'
+  collapse:'<path d="M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5"/>',
+  'chevron-up':'<path d="m6 15 6-6 6 6"/>',
+  'chevron-down':'<path d="m6 9 6 6 6-6"/>',
+  'panel-left':'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m7-12-3 4 3 4"/>',
+  'panel-top':'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18m-12 6 3-3 3 3"/>'
 };
 export function icon(name) { return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.info}</svg>`; }
