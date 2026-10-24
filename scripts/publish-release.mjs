@@ -12,6 +12,11 @@ function gh(args) {
   return execFileSync('gh', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 4 * 1024 * 1024 }).trim();
 }
 
+export function findRelease(repository, tag) {
+  const result = gh(['api', `repos/${repository}/releases?per_page=100`, '--paginate', '--jq', `.[] | select(.tag_name == ${JSON.stringify(tag)})`]);
+  return result ? JSON.parse(result) : undefined;
+}
+
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_EVENT_NAME !== 'push' || !process.env.GITHUB_REF?.startsWith('refs/tags/')) throw new Error('仅允许版本标签触发的 GitHub Actions 发布正式 Release。');
   const { version, tag } = await releaseInfo();
@@ -28,9 +33,7 @@ async function main() {
     checksums.push(`${hash.digest('hex')}  ${name}`);
   }
   await writeFile(path.join(directory, 'SHA256SUMS.txt'), checksums.join('\n') + '\n');
-  let existing;
-  try { existing = JSON.parse(gh(['api', `repos/${repository}/releases/tags/${tag}`])); }
-  catch (error) { if (!error.stderr?.includes('404')) throw error; }
+  let existing = findRelease(repository, tag);
   if (existing && existing.target_commitish !== sha) throw new Error('已有 Release 指向其他提交，拒绝覆盖。');
   if (existing && !existing.draft) {
     console.log(`${tag} 已公开，不修改其附件。`);
@@ -38,11 +41,12 @@ async function main() {
   }
   if (!existing) {
     gh(['release', 'create', tag, '--repo', repository, '--verify-tag', '--draft', '--target', sha, '--title', `Circuit Lab ${tag}`, '--generate-notes']);
-    existing = JSON.parse(gh(['api', `repos/${repository}/releases/tags/${tag}`]));
+    existing = findRelease(repository, tag);
   }
+  if (!existing?.draft) throw new Error('无法读取 Release 草稿，拒绝上传附件。');
   names.push('SHA256SUMS.txt');
   gh(['release', 'upload', tag, ...names.map(name => path.join(directory, name)), '--repo', repository, '--clobber']);
-  const uploaded = JSON.parse(gh(['api', `repos/${repository}/releases/tags/${tag}`]));
+  const uploaded = JSON.parse(gh(['api', `repos/${repository}/releases/${existing.id}`]));
   if (JSON.stringify(uploaded.assets.map(asset => asset.name).sort()) !== JSON.stringify([...names].sort())) throw new Error('远端 Release 附件列表不匹配，保留草稿。');
   for (const name of names) if (uploaded.assets.find(asset => asset.name === name).size !== (await stat(path.join(directory, name))).size) throw new Error(`远端附件大小不匹配：${name}`);
   const notices = '\n\nWindows 构建未做商业代码签名；macOS 为 ad-hoc 签名，未经过 Apple 公证。Android 使用固定发布密钥，旧调试版请先导出实验备份再卸载安装。\n\n附件包含 Windows x64、macOS ARM64/Intel、Linux x64 和 Android APK/AAB；SHA256SUMS.txt 用于校验下载文件。\n';
@@ -53,4 +57,6 @@ async function main() {
   console.log(`已公开 https://github.com/${repository}/releases/tag/${tag}，共 ${names.length} 个附件。`);
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+}
