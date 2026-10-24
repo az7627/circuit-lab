@@ -31,7 +31,7 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildFeatures { buildConfig true; resValues true }
-    sourceSets { main { res.srcDirs += ['../app/src/main/res'] } }
+    sourceSets { main { res.srcDirs += [layout.buildDirectory.dir('generated/shared-res').get().asFile] } }
 }
 dependencies {
     implementation 'org.mozilla.geckoview:geckoview:158.0.20261021001945'
@@ -43,6 +43,10 @@ tasks.register('prepareWorkbench',Copy) {
     from('../../dist')
     into('src/main/assets/app/app')
 }
+tasks.register('prepareNativeResources',Copy) {
+    from('../app/src/main/res') { include 'drawable/circuit_icon.xml', 'values/styles.xml' }
+    into(layout.buildDirectory.dir('generated/shared-res'))
+}
 tasks.register('prepareExtension') {
     dependsOn 'prepareWorkbench'
     doLast {
@@ -50,4 +54,4 @@ tasks.register('prepareExtension') {
         file('src/main/assets/app/manifest.json').text=groovy.json.JsonOutput.toJson(extension)
     }
 }
-tasks.named('preBuild') { dependsOn 'prepareExtension' }
+tasks.named('preBuild') { dependsOn 'prepareExtension','prepareNativeResources' }

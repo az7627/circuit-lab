@@ -74,7 +74,7 @@ public class EmbeddedActivity extends AppCompatActivity {
             }
         });
         session.open(runtime);view.setSession(session);
-        runtime.getWebExtensionController().ensureBuiltIn("resource://android/assets/app/","workbench@circuitlab.local").accept(extension->{
+        runtime.getWebExtensionController().ensureBuiltIn("resource://android/assets/app/","workbench@circuitlab.local").accept(extension->runOnUiThread(()->{
             appUrl=extension.metaData.baseUrl+"app/";
             WebExtension.MessageDelegate messages=new WebExtension.MessageDelegate(){
                 @Override public void onConnect(WebExtension.Port port){
@@ -87,7 +87,7 @@ public class EmbeddedActivity extends AppCompatActivity {
             };
             extension.setMessageDelegate(messages,"circuitlab");session.getWebExtensionController().setMessageDelegate(extension,messages,"circuitlab");
             session.loadUri(appUrl+"index.html");
-        },error->Toast.makeText(this,"离线工作台加载失败："+error.getMessage(),Toast.LENGTH_LONG).show());
+        }),error->runOnUiThread(()->Toast.makeText(this,"离线工作台加载失败："+error.getMessage(),Toast.LENGTH_LONG).show()));
         getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){@Override public void handleOnBackPressed(){if(webPort==null){moveTaskToBack(true);return;}try{webPort.postMessage(new JSONObject().put("event","back"));}catch(Exception error){moveTaskToBack(true);}}});
     }
     private void reply(WebExtension.Port port,JSONObject request,Object result,String error){try{JSONObject response=new JSONObject().put("id",request.optInt("id"));if(error==null)response.put("result",result==null?new JSONObject():result);else response.put("error",error);if(port!=null)port.postMessage(response);}catch(Exception ignored){}}
