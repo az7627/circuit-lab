@@ -6,6 +6,7 @@ import {releaseInfo} from './release-info.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),mode=process.argv[2]||'build';
 const run=(exe,args)=>new Promise((resolve,reject)=>{const child=spawn(exe,args,{cwd:root,stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(new Error(`${exe} 退出码 ${code}`)));});
 await run(process.execPath,['scripts/desktop-icons.mjs']);
+await run(process.execPath,['node_modules/@tauri-apps/cli/tauri.js','icon','dist/favicon.svg','--output','build/tauri-icons']);
 // Tauri AppImages bundle WebKitGTK. The light Linux edition must use the
 // system engine, so ship a dependency-declaring DEB and a plain binary archive.
 const bundles=process.platform==='win32'?'nsis':process.platform==='darwin'?'app,dmg':'deb';

@@ -15,7 +15,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["../build/icon.png", "../build/icon.ico"],
+    "icon": ["../build/tauri-icons/icon.icns", "../build/icon.png", "../build/icon.ico"],
     "category": "Education",
     "shortDescription": "使用系统 WebView 的离线电路实验室",
     "windows": { "webviewInstallMode": { "type": "skip" } },
