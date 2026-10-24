@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   desktop:
+    if: github.event_name != 'workflow_dispatch'
     name: Check ${{ matrix.name }}
     strategy:
       fail-fast: false
@@ -64,3 +65,22 @@ jobs:
           path: artifacts/desktop/
           if-no-files-found: ignore
           retention-days: 7
+
+  release-api-diagnostics:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Inspect draft release API responses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh --version
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{permissions}'
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft,target_commitish}]'
+          gh api -H 'X-GitHub-Api-Version: 2022-11-28' "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]'
+          gh api "repos/$GITHUB_REPOSITORY/releases/422513491" --jq '{id,tag_name,draft}' || true
+          gh release list --repo "$GITHUB_REPOSITORY" --json tagName,isDraft
+          gh release view v2.8.2 --repo "$GITHUB_REPOSITORY" --json tagName,isDraft || true
