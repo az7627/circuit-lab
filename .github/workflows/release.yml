@@ -1,0 +1,204 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: npm run check:git
+      - id: version
+        run: npm run release:check
+
+  desktop:
+    name: Package ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows x64, os: windows-2022, command: 'npm run desktop:build:win' }
+          - { name: macOS ARM64, os: macos-15, command: 'npm run desktop:build:mac -- --arm64' }
+          - { name: macOS Intel, os: macos-15-intel, command: 'npm run desktop:build:mac -- --x64' }
+          - { name: Linux x64, os: ubuntu-24.04, command: 'npm run desktop:build:linux' }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Prepare Linux display and packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox dbus-x11 libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libfuse2t64
+      - name: Build packages
+        run: ${{ matrix.command }}
+      - name: Verify macOS ad-hoc signature
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          find release/desktop -maxdepth 2 -name '*.app' -print0 | while IFS= read -r -d '' app; do
+            codesign --verify --deep --strict "$app"
+          done
+      - name: Prepare Linux packaged sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo chown root:root release/desktop/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 release/desktop/linux-unpacked/chrome-sandbox
+      - name: Check packaged application
+        if: runner.os != 'Linux'
+        run: npm run test:desktop -- --packaged
+      - name: Check packaged application with virtual display
+        if: runner.os == 'Linux'
+        shell: bash
+        run: dbus-run-session -- xvfb-run -a --server-args="-screen 0 1920x1080x24" sh -c 'openbox >/tmp/circuit-lab-openbox.log 2>&1 & exec npm run test:desktop -- --packaged'
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-${{ matrix.os }}
+          path: |
+            release/desktop/*.exe
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.AppImage
+            release/desktop/*.deb
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload diagnostics and incomplete build output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostics-${{ matrix.os }}
+          path: |
+            artifacts/desktop/
+            release/desktop/builder-debug.yml
+            release/desktop/*.exe
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.AppImage
+            release/desktop/*.deb
+          if-no-files-found: ignore
+          retention-days: 7
+
+  android:
+    name: Package Android
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - run: npm ci
+      - name: Install required Android SDK
+        shell: bash
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Restore fixed signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo 'ANDROID_KEYSTORE_BASE64 is required; unsigned/debug fallback is disabled.' >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/circuit-lab-release.jks"
+          printf 'ANDROID_KEYSTORE_FILE=%s/circuit-lab-release.jks\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Build, lint and verify signed APK/AAB
+        run: npm run android:ci
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-android
+          path: |
+            release/android/*.apk
+            release/android/*.aab
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload Android diagnostics and incomplete output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostics-android
+          path: |
+            android/app/build/reports/
+            android/build/reports/
+            release/android/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove temporary signing key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/circuit-lab-release.jks"
+
+  publish:
+    name: Publish GitHub Release
+    needs: [prepare, desktop, android]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: release/collected
+      - name: Validate all assets, create checksums and publish
+        run: npm run release:publish
+        env:
+          GH_TOKEN: ${{ github.token }}

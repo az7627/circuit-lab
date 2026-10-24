@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">电路实验室</string>
+    <string name="title_activity_main">电路实验室</string>
+    <string name="package_name">io.circuitlab.app</string>
+    <string name="custom_url_scheme">io.circuitlab.app</string>
+</resources>

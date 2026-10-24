@@ -1,8 +1,107 @@
 # 电路实验室
 
-面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG，无需安装依赖。
+面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖，另提供 Electron 桌面版和 Capacitor Android 版，均内置网页资源，可离线使用。
 
 在仓库目录运行 `npm run dev`，打开 http://127.0.0.1:4173/ 。`npm test` 检查电路求解、导线、保存及反馈，`npm run check` 检查全部 JavaScript 模块语法。
+
+## 桌面版与 Android 版
+
+以下命令在本 Git 仓库（`circuit-lab/`）执行。打包需要 Node.js 22.21.1 或以上，首次运行 `npm ci` 安装锁定版本的依赖。两端直接打包 `dist/` 的现有网页，无需运行本地服务器。`dist/` 是版本管理中的网页源码，请勿删除或加入忽略规则。
+
+### Electron 桌面版
+
+```powershell
+npm ci
+npm run desktop                # 开发启动
+npm run test:desktop           # 验证开发版 Electron 的启动、重启恢复和导入导出
+npm run test:desktop -- --packaged # 启动当前系统实际打包后的程序进行检查
+npm run desktop:build:win      # Windows x64 安装程序与免安装程序
+npm run desktop:build:mac -- --arm64 # 在 Apple Silicon macOS 上生成 DMG 和 ZIP
+npm run desktop:build:mac -- --x64   # 在 Intel macOS 上生成 DMG 和 ZIP
+npm run desktop:build:linux    # 在 Linux 上生成 x64 AppImage 和 DEB
+```
+
+输出目录为 `release/desktop/`：
+
+- `CircuitLab-<版本>-windows-x64-setup.exe`：可选择安装位置的安装程序。
+- `CircuitLab-<版本>-windows-x64-portable.exe`：免安装启动。
+- `CircuitLab-<版本>-macos-<arm64或x64>.dmg` / `.zip`：对应架构的 macOS 应用。
+- `CircuitLab-<版本>-linux-x64.AppImage` / `.deb`：Linux 免安装程序及 Debian/Ubuntu 安装包。
+
+需要在对应系统上构建，GitHub Actions 会分别提供 Windows、macOS ARM64、macOS Intel 和 Ubuntu 环境，不需要本地 Mac 或 WSL。`npm run desktop:build` 使用当前系统默认目标，`npm run desktop:pack` 仅生成应用目录。图标由 Node 从 SVG 生成到已忽略的 `build/`，不依赖桌面环境。当前 Windows 未做商业代码签名；macOS 使用 ad-hoc 签名及适配权限，未经过 Apple 公证，首次打开可能受到系统安全提示限制。云端启动检查不代表通过 Gatekeeper 公证。后续配置 Windows 证书时先启用 `win.signExecutable`，Apple 证书则替换 `mac.identity` 并配置公证；见 [electron-builder 签名说明](https://www.electron.build/v26/docs/features/code-signing/)。
+
+实验保存在 Electron 的用户数据目录中，与网页版的浏览器数据独立；升级程序不清空实验。网页版已有实验可先在设置中导出 JSON 备份，再在桌面版或 Android 版导入。导入使用系统文件选择器，导出使用系统保存对话框。桌面窗口禁止网页访问 Node.js，使用隔离与沙盒，通过固定本地协议加载内置文件。
+
+### Android
+
+安装 Android Studio、JDK 21、SDK Platform 36 及 SDK Build Tools 36.0.0，并在 SDK Manager 接受相关许可证。支持 Android 7.0（API 24）及以上，需使用更新的 Android System WebView。完整工具要求见 [Capacitor 官方环境说明](https://capacitorjs.com/docs/getting-started/environment-setup)。
+
+```powershell
+npm ci
+npm run android:build          # 同步网页，构建可直接安装的 debug APK
+npm run android:open           # 同步资源并在 Android Studio 中打开原生工程
+npm run android:sync           # 仅同步网页和恢复 Gradle wrapper
+npm run test:android           # 已启动模拟器或连接设备时，验证原生保存重载和文件导出
+```
+
+默认输出 `release/android/CircuitLab-<版本>-android-debug.apk`。首次构建会下载 Gradle、缺失的已授权 SDK 和 Maven 依赖，之后应用本身可完全离线运行。构建脚本自动查找常见位置的 SDK 和 JDK；也可设置 `ANDROID_HOME`、`JAVA_HOME`，或用 `CIRCUIT_LAB_JAVA_HOME` 单独指定打包用的 JDK。Gradle 8.14.3 可运行于 JDK 21–24；JDK 25 需要另装 JDK 21。
+
+Android 原生代码位于 `android/`，实验保存于应用私有数据。系统返回键依次关闭对话框、取消接线、退出全屏或收起侧栏，最后将应用移至后台。导出实验及备份通过 Android 的「另存为」选择位置，无需存储权限；文件导入沿用系统文件选择器。应用隐藏时立即保存草稿。
+
+正式 APK/AAB 使用自己的签名密钥。将以下环境变量设置为已有密钥库的信息（密钥库路径须为绝对路径），再运行 `npm run android:release` 或 `npm run android:bundle`：
+
+| 环境变量 | 含义 |
+| --- | --- |
+| `ANDROID_KEYSTORE_FILE` | 密钥库绝对路径 |
+| `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码 |
+| `ANDROID_KEY_ALIAS` | 密钥别名 |
+| `ANDROID_KEY_PASSWORD` | 私钥密码 |
+
+分别输出 `release/android/CircuitLab-<版本>-android-release.apk` 和 `CircuitLab-<版本>-android-release.aab`；未提供签名配置时会报错，不退回调试签名。`npm run android:ci` 一次执行 Release Lint、APK/AAB 构建及签名校验。版本名称取自 `package.json`，Android `versionCode` 使用 `主版本 × 10000 + 次版本 × 100 + 修订版本`（次版本、修订版本均须小于 100）。
+
+Android 正式包与旧调试包的签名不同，首次切换请先在设置中导出实验备份，再卸载调试版、安装正式版并导入备份。之后的正式版本复用同一密钥，可覆盖升级保留数据。
+
+### Git 与构建产物
+
+只管理源码、文本配置和 `package-lock.json`。`release/`、`artifacts/`、`node_modules/`、Android 构建缓存、机器路径、签名密钥以及 EXE/APK/AAB/JAR/压缩包均已忽略。原生图标使用可提交的 SVG/XML；Gradle wrapper JAR 不提交，`android:sync` 和构建脚本会从 Gradle 官方仓库恢复并校验固定 SHA-256，Gradle 分发包也校验 SHA-256。克隆后先运行 `npm ci` 和 `npm run android:sync`，再从 Android Studio 构建。
+
+## GitHub Actions 自动检查与发版
+
+日常流程：修改源码 → 提交 PR 或推送 `main` → CI 检查 → 推送版本标签 → 自动构建并公开 [GitHub Release](https://github.com/az7627/circuit-lab/releases)。npm 发布暂缓，根包保持 `private: true`。
+
+`CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及 Electron 启动检查。`Build and Release` 工作流在对应系统分别构建 Windows 安装版/免安装版、macOS 两种架构的 DMG/ZIP、Linux AppImage/DEB，并在 Ubuntu 使用 JDK 21、SDK 36 构建正式 Android APK/AAB、运行 Lint 和签名校验。桌面检查使用 Playwright 启动实际打包的程序，验证本地页面、14 种元件、沙盒、全屏、完整重启恢复、JSON 导入导出与窄屏布局。Linux 使用 Xvfb/Openbox 虚拟显示环境，保留沙盒。Android CI 不启动模拟器。
+
+所有构建检查通过后，发布任务收齐 10 个附件，生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
+
+### 后续发布一个新版本
+
+工作区保持干净，在 `main` 上执行：
+
+```powershell
+npm version patch
+git push origin main --follow-tags
+```
+
+`npm version` 自动同步包与锁文件版本、创建版本提交和 `vX.Y.Z` 标签；需要小版本/大版本时改为 `minor` / `major`。标签必须与两处版本一致，只接受稳定的数字版本，次版本和修订版本须小于 100，以保持 Android 版本号递增。
+
+在 GitHub Actions 选择 `Build and Release` → `Run workflow` 可手动构建当前分支。手动运行只提供可下载产物，不创建或公开 Release。未通过时查看对应任务日志和 diagnostics 附件；修复源码后重新构建。网络或上传问题可重跑同一标签并补齐草稿；已经公开的版本和附件不会被覆盖，代码修复需要新版本号。诊断与临时产物保留 7 天，Release 附件长期保留。
+
+### Android 发布密钥的首次接入与恢复
+
+Windows 上已登录 GitHub CLI 后，可运行 `pwsh -File scripts/setup-android-signing.ps1`。脚本只在密钥不存在时生成固定 RSA 4096 位密钥，已有密钥会复用；默认备份位置为用户目录 `.android/circuit-lab-signing/`，位于仓库外且仅当前用户可访问。`credentials.dpapi.xml` 的密码由 Windows DPAPI 加密，仅原 Windows 用户可解密；迁移机器前应在原用户环境将密钥和密码备份至自己的安全存储。
+
+脚本将以下内容写入仓库的 GitHub Actions Secrets，日志只显示名称及公开证书指纹：
+
+| Secret | 用途 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | 固定发布密钥库内容 |
+| `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码 |
+| `ANDROID_KEY_ALIAS` | 密钥别名 |
+| `ANDROID_KEY_PASSWORD` | 私钥密码 |
+
+CI 在 runner 临时目录恢复密钥，签名后删除临时文件。密钥或恢复文件丢失时不要重新生成替换已有正式签名，应从备份恢复。`npm run check:git` 在 CI 中阻止二进制、生成目录或密钥进入 Git 文件列表。
+
+项目代码采用 [MIT 许可证](LICENSE)。
 
 ## 搭建与观察
 

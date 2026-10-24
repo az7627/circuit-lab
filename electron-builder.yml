@@ -1,0 +1,48 @@
+appId: io.circuitlab.desktop
+productName: 电路实验室
+asar: true
+npmRebuild: false
+directories:
+  output: release/desktop
+files:
+  - desktop/**/*
+  - dist/**/*
+  - package.json
+  - LICENSE
+  - '!node_modules/**/*'
+  - from: build/icon.png
+    to: desktop/icon.png
+icon: build/icon.png
+win:
+  target:
+    - nsis
+    - portable
+  icon: build/icon.ico
+  signExecutable: false
+nsis:
+  artifactName: CircuitLab-${version}-windows-${arch}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: CircuitLab-${version}-windows-${arch}-portable.${ext}
+mac:
+  target:
+    - dmg
+    - zip
+  artifactName: CircuitLab-${version}-macos-${arch}.${ext}
+  category: public.app-category.education
+  identity: '-'
+  hardenedRuntime: true
+  notarize: false
+  entitlements: desktop/entitlements.mac.plist
+  entitlementsInherit: desktop/entitlements.mac.plist
+linux:
+  target:
+    - AppImage
+    - deb
+  artifactName: CircuitLab-${version}-linux-${arch}.${ext}
+  executableName: circuit-lab
+  category: Education
+  maintainer: az7627 <az7627@users.noreply.github.com>

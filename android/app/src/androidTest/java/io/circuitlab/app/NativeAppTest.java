@@ -1,0 +1,89 @@
+package io.circuitlab.app;
+
+import static androidx.test.espresso.intent.Intents.intending;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
+import static org.junit.Assert.*;
+
+import android.app.Activity;
+import android.app.Instrumentation;
+import android.content.Intent;
+import androidx.core.content.FileProvider;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.intent.Intents;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+@RunWith(AndroidJUnit4.class)
+public class NativeAppTest {
+    private String evaluate(ActivityScenario<MainActivity> scenario, String script) throws Exception {
+        AtomicReference<String> value = new AtomicReference<>();
+        CountDownLatch done = new CountDownLatch(1);
+        scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(script, result -> {
+            value.set(result);
+            done.countDown();
+        }));
+        assertTrue("WebView evaluation timed out", done.await(10, TimeUnit.SECONDS));
+        return value.get();
+    }
+
+    private void awaitValue(ActivityScenario<MainActivity> scenario, String script, String expected) throws Exception {
+        long deadline = System.currentTimeMillis() + 30000;
+        String actual;
+        do {
+            actual = evaluate(scenario, script);
+            if (expected.equals(actual)) return;
+            Thread.sleep(200);
+        } while (System.currentTimeMillis() < deadline);
+        assertEquals(script, expected, actual);
+    }
+
+    @Test
+    public void offlineWorkbenchPersistsAndNativeJsonExportHandlesSaveAndCancel() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitValue(scenario, "document.querySelectorAll('[data-add]').length", "14");
+            assertEquals("\"android\"", evaluate(scenario, "Capacitor.getPlatform()"));
+            assertEquals("\"function\"", evaluate(scenario, "typeof Capacitor.Plugins.CircuitFiles.saveFile"));
+            evaluate(scenario, "document.getElementById('helpButton').click();" +
+                "document.querySelector('[data-guide=series]').click();" +
+                "document.getElementById('startGuideExperiment').click();" +
+                "document.getElementById('saveExperimentButton').click();" +
+                "document.getElementById('experimentNameInput').value='Android 保存验证';" +
+                "document.getElementById('nameForm').requestSubmit();");
+            scenario.recreate();
+            awaitValue(scenario, "document.getElementById('activeExperimentName')?.textContent", "\"Android 保存验证\"");
+            assertEquals("true", evaluate(scenario, "Number(document.getElementById('totalCurrent').textContent)>0"));
+
+            AtomicReference<File> file = new AtomicReference<>();
+            AtomicReference<Intent> savedResult = new AtomicReference<>();
+            scenario.onActivity(activity -> {
+                File target = new File(activity.getCacheDir(), "native-export-test.json");
+                file.set(target);
+                savedResult.set(new Intent().setData(FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", target)));
+            });
+            Intents.init();
+            try {
+                intending(hasAction(Intent.ACTION_CREATE_DOCUMENT)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_OK, savedResult.get()));
+                evaluate(scenario, "window.__nativeSave='pending';Capacitor.Plugins.CircuitFiles.saveFile({content:'{\"实验\":1}',name:'实验.json'}).then(r=>window.__nativeSave=r.saved).catch(e=>window.__nativeSave=e.message);");
+                awaitValue(scenario, "window.__nativeSave", "true");
+                assertEquals("{\"实验\":1}", new String(Files.readAllBytes(file.get().toPath()), StandardCharsets.UTF_8));
+            } finally {
+                Intents.release();
+            }
+            Intents.init();
+            try {
+                intending(hasAction(Intent.ACTION_CREATE_DOCUMENT)).respondWith(new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null));
+                evaluate(scenario, "window.__nativeSave='pending';Capacitor.Plugins.CircuitFiles.saveFile({content:'{}',name:'取消.json'}).then(r=>window.__nativeSave=r.saved);");
+                awaitValue(scenario, "window.__nativeSave", "false");
+            } finally {
+                Intents.release();
+            }
+        }
+    }
+}
