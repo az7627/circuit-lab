@@ -60,6 +60,34 @@ async function launch() {
   if (packaged) assert.ok((await application.evaluate(({ app }) => app.getAppPath())).endsWith('app.asar'));
 }
 
+async function closeApplication() {
+  if (!application) return;
+  const current = application;
+  application = null;
+  const timer = setTimeout(() => current.process().kill('SIGKILL'), 10000);
+  try { await current.close(); } finally { clearTimeout(timer); }
+}
+
+async function toggleFullscreen(active) {
+  if (process.platform === 'darwin') {
+    await application.evaluate(({ BrowserWindow }, entering) => {
+      globalThis.__circuitFullscreenTransition = false;
+      BrowserWindow.getAllWindows()[0].once(entering ? 'enter-full-screen' : 'leave-full-screen', () => {
+        globalThis.__circuitFullscreenTransition = true;
+      });
+    }, active);
+  }
+  await page.locator('#fullscreenButton').click();
+  if (process.platform === 'darwin') {
+    const deadline = Date.now() + 20000;
+    while (!await application.evaluate(() => globalThis.__circuitFullscreenTransition)) {
+      if (Date.now() > deadline) throw new Error('macOS 原生全屏转换超时');
+      await wait(100);
+    }
+  }
+  await page.waitForFunction(entering => !!document.fullscreenElement === entering, active);
+}
+
 try {
   console.log(`检查${packaged ? '打包后的' : '开发版'}应用：${binary}`);
   await launch();
@@ -71,12 +99,9 @@ try {
   await page.locator('#nameForm').evaluate(form => form.requestSubmit());
   await page.waitForFunction(() => document.getElementById('activeExperimentName').textContent === '持续集成保存验证');
   assert.ok(await page.evaluate(() => Number(document.getElementById('totalCurrent').textContent) > 0));
-  await page.locator('#fullscreenButton').click();
-  await page.waitForFunction(() => !!document.fullscreenElement);
-  await page.locator('#fullscreenButton').click();
-  await page.waitForFunction(() => !document.fullscreenElement);
-  await application.close();
-  application = null;
+  await toggleFullscreen(true);
+  await toggleFullscreen(false);
+  await closeApplication();
   await launch();
   await page.waitForFunction(() => document.getElementById('activeExperimentName').textContent === '持续集成保存验证');
   assert.ok(await page.evaluate(() => Number(document.getElementById('totalCurrent').textContent) > 0));
@@ -117,7 +142,7 @@ try {
   await writeFile(path.join(artifacts, 'error.txt'), `${error.stack}\n${consoleErrors.join('\n')}`);
   throw error;
 } finally {
-  if (application) await application.close().catch(() => {});
+  await closeApplication().catch(() => {});
   const relative = path.relative(os.tmpdir(), profile);
   if (/^circuit-lab-smoke-[^\\/]+$/.test(relative)) await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 }
