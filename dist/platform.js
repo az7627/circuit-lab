@@ -7,6 +7,13 @@ export function androidFiles(bridge = globalThis.Capacitor) {
   return files;
 }
 
+export function androidSystemBars(bridge = globalThis.Capacitor) {
+  if (bridge?.getPlatform?.() !== 'android') return null;
+  const bars = bridge.Plugins?.SystemBars;
+  if (!bars) throw new Error('全屏功能尚未就绪，请重新打开应用。');
+  return bars;
+}
+
 export async function saveFile(content, name, type = 'application/json') {
   const native = androidFiles();
   if (native) {

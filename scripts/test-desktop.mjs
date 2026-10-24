@@ -68,6 +68,11 @@ async function closeApplication() {
   try { await current.close(); } finally { clearTimeout(timer); }
 }
 
+async function clickHeaderAction(id) {
+  if (await page.locator('#' + id).evaluate(element => !!element.closest('#headerActionsMenu')?.hidden)) await page.locator('#headerMoreButton').click();
+  await page.locator('#' + id).click();
+}
+
 async function toggleFullscreen(active) {
   if (process.platform === 'darwin') {
     await application.evaluate(({ BrowserWindow }, entering) => {
@@ -77,7 +82,7 @@ async function toggleFullscreen(active) {
       });
     }, active);
   }
-  await page.locator('#fullscreenButton').click();
+  await clickHeaderAction('fullscreenButton');
   if (process.platform === 'darwin') {
     const deadline = Date.now() + 20000;
     while (!await application.evaluate(() => globalThis.__circuitFullscreenTransition)) {
@@ -91,20 +96,24 @@ async function toggleFullscreen(active) {
 try {
   console.log(`检查${packaged ? '打包后的' : '开发版'}应用：${binary}`);
   await launch();
-  await page.locator('#helpButton').click();
-  await page.locator('[data-guide="series"]').click();
-  await page.locator('#startGuideExperiment').click();
-  await page.locator('#saveExperimentButton').click();
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  await page.locator('#emptyCreateButton').click();
   await page.locator('#experimentNameInput').fill('持续集成保存验证');
   await page.locator('#nameForm').evaluate(form => form.requestSubmit());
+  await clickHeaderAction('helpButton');
+  await page.locator('[data-guide="series"]').click();
+  await page.locator('#startGuideExperiment').click();
   await page.waitForFunction(() => document.getElementById('activeExperimentName').textContent === '持续集成保存验证');
-  assert.ok(await page.evaluate(() => Number(document.getElementById('totalCurrent').textContent) > 0));
+  await page.locator('[data-component="a1"]').focus();await page.keyboard.press('Enter');
+  assert.ok(await page.evaluate(() => parseFloat(document.getElementById('selectedCurrent').textContent) > 0));
   await toggleFullscreen(true);
   await toggleFullscreen(false);
   await closeApplication();
   await launch();
   await page.waitForFunction(() => document.getElementById('activeExperimentName').textContent === '持续集成保存验证');
-  assert.ok(await page.evaluate(() => Number(document.getElementById('totalCurrent').textContent) > 0));
+  assert.equal(await page.locator('#inspector').isVisible(), false);
+  await page.locator('[data-component="a1"]').focus();await page.keyboard.press('Enter');
+  assert.ok(await page.evaluate(() => parseFloat(document.getElementById('selectedCurrent').textContent) > 0));
 
   const exported = path.join(artifacts, 'exported-experiment.json');
   await application.evaluate(({ session }, target) => {
@@ -114,7 +123,7 @@ try {
       item.once('done', (_doneEvent, state) => { globalThis.__circuitLabDownload = state; });
     });
   }, exported);
-  await page.locator('#experimentExportButton').click();
+  await clickHeaderAction('experimentExportButton');
   const deadline = Date.now() + 20000;
   let download;
   do {
@@ -128,6 +137,8 @@ try {
   await page.waitForFunction(() => document.getElementById('activeExperimentName').textContent === '持续集成保存验证（导入）');
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(390, 844));
   await page.waitForFunction(() => innerWidth < 450);
+  await page.waitForFunction(() => { const board = document.getElementById('board').getBoundingClientRect(); return board.width > 100 && board.height > 150; });
+  await page.waitForTimeout(320);
   const layout = await page.evaluate(() => {
     const board = document.getElementById('board').getBoundingClientRect();
     return { width: board.width, height: board.height, overflow: document.documentElement.scrollWidth > innerWidth };

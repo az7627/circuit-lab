@@ -1,6 +1,6 @@
 import {clone,normalizeState} from './data.js?v=2.6';
 export const EXPERIMENTS_KEY='circuit-lab-experiments-v2';
-const defaultSettings={sound:true,volume:.35,motion:true};
+const defaultSettings={sound:true,volume:.35,motion:true,theme:'system'};
 export function emptyCollection(){return {version:2,experiments:[],activeId:null,draft:null,draftName:'未保存的实验',settings:{...defaultSettings}};}
 export function normalizeCollection(input){
   if(!input||input.version!==2||!Array.isArray(input.experiments)||input.experiments.length>500)return null;
@@ -8,7 +8,7 @@ export function normalizeCollection(input){
   for(const e of input.experiments){const state=normalizeState(e?.state);if(!e||typeof e.id!=='string'||!/^[a-zA-Z0-9_-]+$/.test(e.id)||ids.has(e.id)||typeof e.name!=='string'||!e.name.trim()||e.name.length>60||!state||typeof e.archived!=='boolean')return null;ids.add(e.id);output.experiments.push({...e,state});}
   output.activeId=output.experiments.some(e=>e.id===input.activeId&&!e.archived)?input.activeId:null;
   output.draft=normalizeState(input.draft);output.draftName=typeof input.draftName==='string'&&input.draftName.length<=60?input.draftName:'未保存的实验';
-  output.settings={sound:input.settings?.sound!==false,volume:Number.isFinite(input.settings?.volume)?Math.max(0,Math.min(1,input.settings.volume)):.35,motion:input.settings?.motion!==false};
+  output.settings={sound:input.settings?.sound!==false,volume:Number.isFinite(input.settings?.volume)?Math.max(0,Math.min(1,input.settings.volume)):.35,motion:input.settings?.motion!==false,theme:['system','light','dark'].includes(input.settings?.theme)?input.settings.theme:'system'};
   return output;
 }
 /** All writes are transactional: a quota failure does not claim a successful save. */

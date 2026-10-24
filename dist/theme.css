@@ -1,0 +1,103 @@
+/* Shared surfaces keep the canvas artwork intact in both appearance modes. */
+:root{
+  color-scheme:light;
+  --app-bg:#f7f8fb;--panel-bg:#fff;--raised-bg:#fff;--hover-bg:#f7f4fd;
+  --soft-bg:#f5f1fc;--text-main:#51445f;--text-secondary:#897895;--text-muted:#a89ab2;
+  --line:#eae5f1;--purple:#7357ec;--purple-dark:#6245d5;--purple-soft:#f0ecff;
+  --ink:#292b3b;--muted:#9699a9;--surface:#f7f8fb;--green:#40aa8c;
+  --board-bg:#fdfdff;--board-dot:#dfdfe9;--physical-bg:#f7f5f0;--physical-dot:#dcd9cf;
+  --diagram-stroke:#8c78ac;--diagram-fill:#fdfcff;--diagram-text:#887398;
+  --card-shadow:0 8px 30px #39264d15;--dialog-shadow:0 20px 90px #32274825;
+  --physical-card:#fdfcf9;--physical-card-hover:#f7f2e9;--physical-name:#63717d;--physical-value:#90969a;
+  --danger:#c47589;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --app-bg:#121620;--panel-bg:#191e2a;--raised-bg:#202635;--hover-bg:#2a3042;
+  --soft-bg:#24283b;--text-main:#e1dfeb;--text-secondary:#b2abc5;--text-muted:#8f8a9f;
+  --line:#343747;--purple:#b4a0ff;--purple-dark:#c3b3ff;--purple-soft:#302945;
+  --ink:#e1dfeb;--muted:#a4a1b5;--surface:#121620;--green:#67cbb0;
+  --board-bg:#141923;--board-dot:#303548;--physical-bg:#191e25;--physical-dot:#353b44;
+  --diagram-stroke:#baa7df;--diagram-fill:#232b3b;--diagram-text:#c1b0dc;
+  --card-shadow:0 8px 32px #0005;--dialog-shadow:0 20px 90px #0008;
+  --physical-card:#222831;--physical-card-hover:#30353e;--physical-name:#b9c4d1;--physical-value:#909caa;
+  --danger:#ed99ac;
+}
+body,.workspace,.header-panel-content{background:var(--app-bg);color:var(--text-main)}
+.header-panel-content{position:relative;background:var(--panel-bg)}
+.header-panel-content:after{content:'';position:absolute;inset:auto 0 0;height:1px;background:var(--line);pointer-events:none}
+.site-header,.component-panel,.experiment-sidebar.navigation{background:var(--panel-bg);border-color:var(--line)}
+.site-header,.layout-controls{transition:background-color .2s,border-color .2s,color .2s,box-shadow .2s}
+.brand,#activeExperimentName,.sidebar-heading h2,.panel-title h2{color:var(--text-main)}
+.brand-mark,.button.primary{background:#7357ec;color:#fff}
+.button.primary:hover{background:#6245d5}
+.text-button,.tool-button,.muted,.small-label{color:var(--text-secondary)}
+.text-button:hover,.tool-button:hover{background:var(--hover-bg)}
+.header-zoom{border-color:var(--line)}
+#zoomLabel{color:var(--text-secondary)}
+.view-mode-switch{background:var(--soft-bg);border-color:var(--line)}
+.view-mode-switch button{color:var(--text-secondary)}
+.view-mode-switch button.active{background:var(--raised-bg);color:var(--purple)}
+.layout-controls{background:transparent;border-color:transparent;box-shadow:none;backdrop-filter:none}
+.header-collapsed.toolbar-collapsed:not(.sidebar-open) .layout-controls{background:color-mix(in srgb,var(--raised-bg) 96%,transparent);border-color:var(--line);box-shadow:0 3px 12px #0002;backdrop-filter:blur(8px)}
+.layout-controls .tool-button{color:var(--text-secondary);background:transparent}
+.layout-controls .tool-button:hover{color:var(--text-secondary);background:var(--hover-bg)}
+.experiment-more,.open-experiment .icon,.experiment-empty,.experiment-empty strong{color:var(--text-secondary)}
+.saved-experiment:hover,.experiment-more:hover{background:var(--hover-bg);color:var(--text-main)}
+.saved-experiment.active{background:var(--purple-soft);color:var(--purple)}
+.tools-section{border-color:var(--line)}
+.tool-card,.component-card{background:var(--raised-bg);border-color:var(--line);color:var(--text-main)}
+.tool-card:hover,.component-card:hover{background:var(--hover-bg);border-color:var(--purple)}
+.tool-card.active{background:var(--purple-soft);border-color:var(--purple);color:var(--purple)}
+.history-tools button{color:var(--text-secondary)}
+.history-tools button:hover:enabled{background:var(--hover-bg);color:var(--purple)}
+.component-library[data-view-mode="physical"] .component-card{background:var(--physical-card);border-color:var(--line)}
+.component-library[data-view-mode="physical"] .component-card:hover{background:var(--physical-card-hover);border-color:var(--text-muted)}
+.board-wrap{background-color:var(--board-bg);background-image:radial-gradient(var(--board-dot) 1px,transparent 1px)}
+.physical-board{background-color:var(--physical-bg);background-image:radial-gradient(var(--physical-dot) .8px,transparent .8px)}
+.component-symbol{stroke:var(--diagram-stroke);fill:var(--diagram-fill)}
+.component-name,.meter-letter,.meter-digits,.motor-letter{fill:var(--diagram-text)}
+.component-value,.battery-polarity,.switch-port-label,.canvas-empty{fill:var(--text-muted)}
+.physical-board .component-name{fill:var(--physical-name)}
+.physical-board .component-value{fill:var(--physical-value)}
+.terminal{fill:var(--diagram-fill);stroke:var(--diagram-stroke)}
+.inspector{background:var(--panel-bg);color:var(--text-main);border-color:var(--line);box-shadow:var(--card-shadow)}
+.selected-info strong{color:var(--text-main)}
+.selected-info small,.property-label,.range-labels,.component-readings,.component-power,.junction-property,.node-instructions{color:var(--text-secondary)}
+.selected-icon,.switch-action{background:var(--purple-soft);color:var(--purple)}
+.component-readings b,.component-power b,.junction-property b{color:var(--text-main)}
+.value-input{background:var(--raised-bg);border-color:var(--line);color:var(--text-secondary)}
+.value-input input{color:var(--text-main);background:transparent}
+input[type="range"]{accent-color:var(--purple)}
+.property-actions button{color:var(--text-secondary)}
+.property-actions button:hover{color:var(--purple)}
+.spdt-options .active{background:var(--purple-soft);color:var(--purple);border-color:var(--purple)}
+.meter-range-info{background:var(--soft-bg);border-color:var(--line);color:var(--text-secondary)}
+.meter-range-info strong{color:var(--text-main)}
+.meter-warning{color:var(--danger)}
+.empty-workspace{background:radial-gradient(ellipse at 50% 40%,var(--purple-soft),transparent 65%)}
+.empty-workspace-icon{background:var(--purple-soft);border-color:var(--line);color:var(--purple)}
+.empty-workspace h1{color:var(--text-main)}
+.empty-workspace p{color:var(--text-secondary)}
+.button.secondary{background:var(--raised-bg);border-color:var(--line);color:var(--text-secondary)}
+.button.secondary:hover{background:var(--hover-bg)}
+.experiment-menu{background:var(--raised-bg);border-color:var(--line);box-shadow:var(--card-shadow)}
+.experiment-menu button{color:var(--text-secondary)}
+.experiment-menu button:hover{background:var(--hover-bg)}
+.danger-action{color:var(--danger)!important}
+dialog{background:var(--panel-bg);color:var(--text-main);border-color:var(--line);box-shadow:var(--dialog-shadow)}
+:root[data-theme="dark"] dialog[open]::backdrop{background:#07090fc2}
+.dialog-header h2,.guide-content h3,.settings-row strong,.settings-backup h3,.archived-experiment strong{color:var(--text-main)}
+.eyebrow,.confirm-dialog p,.name-input-label,.guide-content,.guide-model,.dialog-footer>span,.archive-empty{color:var(--text-secondary)}
+.name-input-label input{background:var(--raised-bg);border-color:var(--line);color:var(--text-main)}
+.settings-tabs,.settings-row,.dialog-footer,.guide-tabs,.archived-experiment{border-color:var(--line)}
+.settings-tabs button,.guide-tabs button{color:var(--text-secondary)}
+.settings-tabs button.active,.guide-tabs button.active{background:var(--purple-soft);color:var(--purple)}
+.settings-tabs span{background:var(--soft-bg);color:var(--text-secondary)}
+.settings-row p,.settings-backup p,.volume-row label,.volume-row>span{color:var(--text-secondary)}
+#themeSetting{flex:none;min-width:112px;max-width:45%;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--text-main);background:var(--raised-bg);font-size:12px}
+.toggle{background:var(--line)}
+.toggle:after{background:var(--raised-bg)}
+.guide-formula,.guide-shortcuts kbd{background:var(--purple-soft);color:var(--purple)}
+.guide-shortcuts span{border-color:var(--line)}
+.toast{background:var(--raised-bg);color:var(--text-main);border:1px solid var(--line);box-shadow:var(--card-shadow)}
