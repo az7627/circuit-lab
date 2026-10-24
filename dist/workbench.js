@@ -2,8 +2,8 @@ import {convertView,routeCircuit,moveItem} from './layout.js?v=2.7';
 import {isMeter,meterConnection,meterScale,visibleTerminals,terminalLabel} from './meters.js?v=2.6';
 import {solveCircuit} from './solver.js?v=2.6';
 import {definitions,component,createPreset} from './models.js?v=2.6';
-import {symbol,thumbnail} from './symbols.js?v=2.6';
-import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.6';
+import {symbol,thumbnail} from './symbols.js?v=2.9.1';
+import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.9.1';
 import {icons,icon} from './icons.js?v=2.9.0';
 import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera,feedbackLevel} from './visuals.js?v=2.6';
 import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute} from './wiring.js?v=2.6';
@@ -13,7 +13,7 @@ import {BellAudio} from './audio.js?v=2.6';
 import {RotorMotion} from './motion.js?v=2.6';
 import {terminalIndices} from './terminals.js?v=2.6';
 import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.6';
-import {saveFile,androidSystemBars} from './platform.js?v=2.9.0';
+import {saveFile,androidSystemBars,systemDesktop} from './platform.js?v=2.9.1';
 import {zoomView,startPinch,movePinch} from './camera.js';
 
 if(location.protocol==='circuit:'||globalThis.Capacitor?.getPlatform?.()==='android'){
@@ -36,7 +36,8 @@ let saveTimer,toastTimer,confirmCallback,nameCallback,menuId=null,fullscreenFocu
 let storageErrorShown=false,audioStatus='closed';
 let cameraAnimation=null,pinch=null,pendingTouch=null;
 let nativeFullscreen=false,fullscreenBusy=false;
-const touchPoints=new Map(),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'),systemTheme=matchMedia('(prefers-color-scheme: dark)');
+let nativeSystemDark=globalThis.circuitLabNativeDark??null;
+const touchPoints=new Map(),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'),systemTheme=matchMedia('(prefers-color-scheme: dark)'),compactProperties=matchMedia('(max-width:1180px), (max-height:650px)');
 const rotors=new Map();let fanFrame=null;
 let lastSwitchClick=null;
 function renderAudioState(){const el=$('audioState');el.dataset.audioState=audioStatus;el.textContent=!store.data.settings.sound?'电铃声音已关闭。':{running:'声音已就绪；电铃音量随功率变化。',suspended:'点击工作台即可启用电铃声音。',closed:'点击工作台即可启用电铃声音。',unavailable:'此浏览器暂不支持声音反馈。',blocked:'点击工作台后重新启用声音。'}[audioStatus]??'点击工作台后，通电的电铃会响。';}
@@ -115,20 +116,25 @@ function renderBoard(){
 }
 function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?[p,...pendingTrace,lastPointer].map((v,i)=>`${i?'L':'M'}${v.x} ${v.y}`).join(' '):`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
 function renderReadings(){const reading=solution.components[selected];if($('selectedVoltage'))$('selectedVoltage').textContent=fixed(getJunction(selected)?solution.nodes[`${selected}:0`]:reading?.voltage??0)+' V';if($('selectedCurrent'))$('selectedCurrent').textContent=fixed(reading?.current??0)+' A';if($('selectedPower'))$('selectedPower').textContent=fixed(Math.abs(reading?.power??0))+' W';}
+function updatePropertiesTitle(){
+  const c=getComponent(selected),n=getJunction(selected),w=getWire(selected);
+  $('propertiesTitle').textContent=compactProperties.matches?(c?definitions[c.type].name+label(c):n?'接线节点 '+n.id.toUpperCase():w?'导线 '+w.id.toUpperCase():'元件属性'):(c?'元件属性':n?'节点属性':'导线属性');
+}
+compactProperties.addEventListener('change',updatePropertiesTitle);
 function renderProperties(){
   const panel=$('componentProperties'),c=getComponent(selected),n=getJunction(selected),w=getWire(selected);
-  const hasSelection=!!(c||n||w);$('propertiesSection').hidden=!hasSelection;$('inspector').hidden=!hasSelection;$('propertiesTitle').textContent=c?'元件属性':n?'节点属性':'导线属性';
+  const hasSelection=!!(c||n||w);$('propertiesSection').hidden=!hasSelection;$('inspector').hidden=!hasSelection;updatePropertiesTitle();
   if(panel.dataset.selection!==String(selected)){panel.dataset.selection=String(selected);if((c||n||w)&&!reducedMotion.matches)panel.animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'none'}],{duration:180,easing:'ease-out'});}
-  if(n){const count=state.wires.filter(w=>w.a===`${n.id}:0`||w.b===`${n.id}:0`).length;panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('junction')}</span><div><strong>接线节点 ${n.id.toUpperCase()}</strong><small>实心节点上的支路互相接通</small></div></div><div class="junction-property">已连接 <b>${count}</b> 条导线<br>X ${fixed(n.x,0)} · Y ${fixed(n.y,0)}<br>对电源负极电位 <b id="selectedVoltage">—</b></div><p class="node-instructions">选择模式可拖动节点。导线工具下，点击或拖动此节点开始连接。</p><div class="property-actions"><button id="startNodeWire">${icon('junction')}从此节点连接</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;$('startNodeWire').onclick=()=>{setTool('junction');beginWire(`${n.id}:0`);};$('deleteSelected').onclick=()=>deleteSelected();renderReadings();return;}
-  if(w){panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('wire')}</span><div><strong>导线</strong><small>导线显示在元件上方，可单独选中</small></div></div><p class="node-instructions">使用接线节点工具点击导线，可以插入分支节点。普通导线交叉不会自动接通。</p><div class="property-actions"><button id="insertNodeTool">${icon('junction')}接线节点</button><button id="deleteSelected">${icon('trash')}删除导线</button></div>`;$('insertNodeTool').onclick=()=>setTool('junction');$('deleteSelected').onclick=()=>deleteSelected();return;}
+  if(n){const count=state.wires.filter(w=>w.a===`${n.id}:0`||w.b===`${n.id}:0`).length;panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('junction')}</span><div><strong>接线节点 ${n.id.toUpperCase()}</strong></div></div><div class="junction-property">已连接 <b>${count}</b> 条导线<br>X ${fixed(n.x,0)} · Y ${fixed(n.y,0)}<br>对电源负极电位 <b id="selectedVoltage">—</b></div><p class="node-instructions">选择模式可拖动节点。导线工具下，点击或拖动此节点开始连接。</p><div class="property-actions"><button id="startNodeWire">${icon('junction')}从此节点连接</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;$('startNodeWire').onclick=()=>{setTool('junction');beginWire(`${n.id}:0`);};$('deleteSelected').onclick=()=>deleteSelected();renderReadings();return;}
+  if(w){panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('wire')}</span><div><strong>导线</strong></div></div><p class="node-instructions">使用接线节点工具点击导线，可以插入分支节点。普通导线交叉不会自动接通。</p><div class="property-actions"><button id="insertNodeTool">${icon('junction')}接线节点</button><button id="deleteSelected">${icon('trash')}删除导线</button></div>`;$('insertNodeTool').onclick=()=>setTool('junction');$('deleteSelected').onclick=()=>deleteSelected();return;}
   if(!c){panel.replaceChildren();return;}
   const d=definitions[c.type],parameter={battery:['电源电压','U'],capacitor:['电容量','C'],inductor:['电感量','L'],fuse:['额定电流','I'],rheostat:['有效电阻','R']}[c.type]??['电阻值','R'];
-  panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${partThumbnail(c.type,'inspector')}</span><div><strong>${d.name} ${label(c)}</strong><small>${d.note??(c.type==='switch'?'在下方切换开关状态':c.type==='ammeter'?'理想电流表 · 串联接入':c.type==='voltmeter'?'理想电压表 · 并联接入':'理想直流模型')}</small></div></div>`+(d.unit?`<div class="property-label"><span>${parameter[0]}</span><b>${parameter[1]}</b></div><label class="value-input"><input id="propertyNumber" type="number" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="${d.name} ${label(c)} ${parameter[0]}"><span>${d.unit}</span></label><input id="propertyRange" type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="滑动调整${d.name}"><div class="range-labels"><span>${d.min} ${d.unit}</span><span>${d.max} ${d.unit}</span></div>`:c.type==='switch'?`<button id="switchToggle" class="switch-action">${c.closed?'断开开关':'闭合开关'}</button>`:c.type==='spdt'?`<div class="property-label"><span>接通支路</span><b>C → ${c.position}</b></div><div class="spdt-options" role="group" aria-label="双掷开关接通支路">${[1,2].map(position=>`<button class="switch-action ${c.position===position?'active':''}" data-spdt-position="${position}" aria-pressed="${c.position===position}">公共端 → ${position}</button>`).join('')}</div>`:'')+(c.type==='fuse'&&c.blown?'<button id="replaceFuse" class="switch-action">更换保险丝</button>':'')+`<div class="component-readings"><span>U<b id="selectedVoltage">—</b></span><span>I<b id="selectedCurrent">—</b></span></div><div class="component-power">电功率 <b id="selectedPower">—</b></div><div class="property-actions"><button id="rotateComponent">${icon('rotate')}旋转 90°</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;
+  panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${partThumbnail(c.type,'inspector')}</span><div><strong>${d.name} ${label(c)}</strong></div></div>`+(d.unit?`<div class="property-label"><span>${parameter[0]}</span><b>${parameter[1]}</b></div><label class="value-input"><input id="propertyNumber" type="number" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="${d.name} ${label(c)} ${parameter[0]}"><span>${d.unit}</span></label><input id="propertyRange" type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="滑动调整${d.name}"><div class="range-labels"><span>${d.min} ${d.unit}</span><span>${d.max} ${d.unit}</span></div>`:c.type==='switch'?`<button id="switchToggle" class="switch-action">${c.closed?'断开开关':'闭合开关'}</button>`:c.type==='spdt'?`<div class="property-label"><span>接通支路</span><b>C → ${c.position}</b></div><div class="spdt-options" role="group" aria-label="双掷开关接通支路">${[1,2].map(position=>`<button class="switch-action ${c.position===position?'active':''}" data-spdt-position="${position}" aria-pressed="${c.position===position}">公共端 → ${position}</button>`).join('')}</div>`:'')+(c.type==='fuse'&&c.blown?'<button id="replaceFuse" class="switch-action">更换保险丝</button>':'')+`<div class="component-readings"><span>U<b id="selectedVoltage">—</b></span><span>I<b id="selectedCurrent">—</b></span></div><div class="component-power">电功率 <b id="selectedPower">—</b></div><div class="property-actions"><button id="rotateComponent">${icon('rotate')}旋转 90°</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;
   $('rotateComponent').onclick=()=>{const before=clone(state);pushHistory();moveItem(state,c.id,{angle:(c.angle+90)%360},before);update({route:false});};$('deleteSelected').onclick=()=>deleteSelected();
   document.querySelectorAll('[data-spdt-position]').forEach(button=>button.onclick=()=>{if(c.position!==Number(button.dataset.spdtPosition))toggleSwitch(c.id);});
   if($('switchToggle'))$('switchToggle').onclick=()=>toggleSwitch(c.id);if($('replaceFuse'))$('replaceFuse').onclick=()=>{pushHistory();c.blown=false;update();};
   if(d.unit){let before=null;for(const id of ['propertyNumber','propertyRange']){const input=$(id);input.addEventListener('focus',()=>before=clone(state));input.addEventListener('pointerdown',()=>before=clone(state));input.addEventListener('input',()=>{const v=Number(input.value);if(input.value===''||!Number.isFinite(v)||v<d.min||v>d.max)return;if(!before)before=clone(state);c.value=Math.round(v*100)/100;$(id==='propertyNumber'?'propertyRange':'propertyNumber').value=c.value;recompute();renderBoard();renderReadings();audio.sync(activeId?state.components:[],solution.components,store.data.settings);saveSoon();});input.addEventListener('change',()=>{if(before&&JSON.stringify(before.components)!==JSON.stringify(state.components))pushHistory(before);before=null;if(input.value===''||Number(input.value)<d.min||Number(input.value)>d.max){input.value=c.value;toast(`请输入 ${d.min}–${d.max} ${d.unit}`);}if(c.type==='fuse'&&c.blown)renderProperties();});}}
-  if(isMeter(c.type)){const connection=meterConnection(c,state.wires),reading=solution.components[c.id],value=reading?.[c.type==='ammeter'?'current':'voltage']??0,scale=meterScale(value,connection.range);panel.querySelector('.selected-info').insertAdjacentHTML('afterend',`<div class="meter-range-info"><strong>当前量程：0–${connection.range} ${c.type==='ammeter'?'A':'V'}</strong><p>左柱为公共负端，中柱为小量程正端，右柱为大量程正端。更换正接线柱即可更改量程。</p>${connection.conflict?'<b class="meter-warning">两个正接线柱同时接线，请保留一个。</b>':scale.overload?'<b class="meter-warning">已超量程，请改接大量程或减小被测值。</b>':scale.reversed?'<b class="meter-warning">电表反接，请检查正负接线柱。</b>':''}</div>`);}
+  if(isMeter(c.type)){const connection=meterConnection(c,state.wires),reading=solution.components[c.id],value=reading?.[c.type==='ammeter'?'current':'voltage']??0,scale=meterScale(value,connection.range);panel.querySelector('.property-actions').insertAdjacentHTML('beforebegin',`<div class="meter-range-info"><strong>当前量程：0–${connection.range} ${c.type==='ammeter'?'A':'V'}</strong><p>左柱为公共负端，中柱为小量程正端，右柱为大量程正端。更换正接线柱即可更改量程。</p>${connection.conflict?'<b class="meter-warning">两个正接线柱同时接线，请保留一个。</b>':scale.overload?'<b class="meter-warning">已超量程，请改接大量程或减小被测值。</b>':scale.reversed?'<b class="meter-warning">电表反接，请检查正负接线柱。</b>':''}</div>`);}
   renderReadings();
 }
 function prepareRoutes(){routeCircuit(state,state.viewMode,{preservePhysical:state.routingVersion===1});state.routingVersion=1;}
@@ -236,6 +242,8 @@ async function toggleFullscreen(){
   if(fullscreenBusy)return;fullscreenBusy=true;
   try{
     const bars=androidSystemBars();
+    const desktop=systemDesktop();
+    if(desktop){const entering=!nativeFullscreen;await desktop.invoke('set_fullscreen',{fullscreen:entering});nativeFullscreen=entering;renderFullscreen();if(entering)fullscreenFocus=document.activeElement;else fullscreenFocus?.focus?.({preventScroll:true});return;}
     if(bars){const entering=!nativeFullscreen;await (entering?bars.hide():bars.show());nativeFullscreen=entering;renderFullscreen();if(!entering)fullscreenFocus?.focus?.({preventScroll:true});else fullscreenFocus=document.activeElement;return;}
     if(document.fullscreenElement){await document.exitFullscreen();return;}
     fullscreenFocus=document.activeElement;
@@ -302,12 +310,14 @@ function updateDock(){
   const above=rect.width-toolWidth<rect.height;workspace.classList.toggle('tools-above',above);$('toolbarToggle').innerHTML=icon(above?'panel-top':'panel-left');
 }
 function applyTheme(){
-  const preference=store.data.settings.theme,dark=preference==='dark'||preference==='system'&&systemTheme.matches;
+  const preference=store.data.settings.theme,dark=preference==='dark'||preference==='system'&&(nativeSystemDark??systemTheme.matches);
   document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.dataset.themePreference=preference;
   $('themeSetting').value=preference;document.querySelector('meta[name="theme-color"]').content=dark?'#171b26':'#7357ec';
   try{const bars=androidSystemBars();if(bars?.setStyle)bars.setStyle({style:dark?'DARK':'LIGHT'}).catch(()=>{});}catch{}
 }
 systemTheme.addEventListener('change',()=>applyTheme());
+const nativeAppearance=globalThis.Capacitor?.getPlatform?.()==='android'?globalThis.Capacitor.Plugins?.CircuitAppearance:null;
+if(nativeAppearance){nativeAppearance.addListener('themeChanged',appearance=>{nativeSystemDark=!!appearance.dark;applyTheme();});nativeAppearance.getSystemTheme().then(appearance=>{nativeSystemDark=!!appearance.dark;applyTheme();}).catch(()=>{});}
 new ResizeObserver(entries=>document.documentElement.style.setProperty('--header-height',entries[0].target.getBoundingClientRect().height+'px')).observe($('headerPanel'));
 new ResizeObserver(updateDock).observe($('workspace'));
 new ResizeObserver(fitHeader).observe(document.querySelector('.site-header'));

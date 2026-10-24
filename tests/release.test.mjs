@@ -21,6 +21,12 @@ test('a release requires both mac architectures, both desktop formats and signed
   for (const file of ['CircuitLab-2.8.2-macos-arm64.dmg', 'CircuitLab-2.8.2-macos-x64.zip', 'CircuitLab-2.8.2-linux-x64.deb', 'CircuitLab-2.8.2-android-release.apk', 'CircuitLab-2.8.2-android-release.aab']) assert.ok(files.includes(file));
 });
 
+test('v2.9.1 requires desktop system WebView and bundled Android editions as well',()=>{
+  const names=expectedAssets('2.9.1');assert.equal(names.length,20);assert.equal(new Set(names).size,20);
+  for(const file of ['CircuitLab-2.9.1-windows-x64-system-webview-setup.exe','CircuitLab-2.9.1-macos-arm64-system-webview.zip','CircuitLab-2.9.1-linux-x64-system-webview.tar.gz','CircuitLab-2.9.1-android-embedded-release.apk'])assert.ok(names.includes(file));
+  assert.ok(!names.includes('CircuitLab-2.9.1-linux-x64-system-webview.AppImage'),'The system WebView edition must not bundle WebKitGTK in an AppImage');
+});
+
 test('downloaded release assets reject platform-renamed, missing, empty and unexpected packages', async t => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'circuit-lab-assets-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

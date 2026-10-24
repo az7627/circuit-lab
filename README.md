@@ -1,6 +1,6 @@
 # 电路实验室
 
-面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖，另提供 Electron 桌面版和 Capacitor Android 版，均内置网页资源，可离线使用。
+面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖。Windows、macOS、Linux 和 Android 均提供内置浏览器内核、使用系统 WebView 两种版本，网页资源均随应用打包，可离线使用。
 
 在仓库目录运行 `npm run dev`，打开 http://127.0.0.1:4173/ 。`npm test` 检查电路求解、导线、保存及反馈，`npm run check` 检查全部 JavaScript 模块语法。安装 Chrome 后可运行 `npm run test:ui`，检查自动保存、单行顶栏、悬浮属性、栏位收起、深浅色偏好、鼠标缩放与真实双指事件；也可设置 `CIRCUIT_LAB_BROWSER=msedge` 使用 Edge。截图保存在 `artifacts/ui/`。
 
@@ -9,6 +9,8 @@
 以下命令在本 Git 仓库（`circuit-lab/`）执行。打包需要 Node.js 22.21.1 或以上，首次运行 `npm ci` 安装锁定版本的依赖。两端直接打包 `dist/` 的现有网页，无需运行本地服务器。`dist/` 是版本管理中的网页源码，请勿删除或加入忽略规则。
 
 ### Electron 桌面版
+
+这是内置 Chromium 的完整桌面版，运行时一致，安装包较大。
 
 ```powershell
 npm ci
@@ -32,19 +34,36 @@ npm run desktop:build:linux    # 在 Linux 上生成 x64 AppImage 和 DEB
 
 实验保存在 Electron 的用户数据目录中，与网页版的浏览器数据独立；升级程序不清空实验。网页版已有实验可先在设置中导出 JSON 备份，再在桌面版或 Android 版导入。导入使用系统文件选择器，导出使用系统保存对话框。桌面窗口禁止网页访问 Node.js，使用隔离与沙盒，通过固定本地协议加载内置文件。
 
+### 桌面系统 WebView 轻量版
+
+轻量版使用 Tauri，不随应用打包浏览器内核。Windows 使用已安装的 Microsoft Edge WebView2 Runtime，macOS 使用系统 WKWebView，Linux 使用 WebKitGTK 4.1。Windows 安装程序不下载或安装 WebView2，缺少运行时的机器须先安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。Linux DEB 声明系统 WebKitGTK/GTK 依赖，免安装压缩包同样使用系统运行时，面向 Ubuntu 24.04 或兼容环境。系统运行时及开发依赖见 [Tauri 官方说明](https://v2.tauri.app/start/prerequisites/)。
+
+安装 Rust 1.97.1 和对应系统开发工具后执行：
+
+```powershell
+npm run system:dev            # 开发启动
+npm run system:build          # 当前平台的系统 WebView 安装包
+npm run test:system           # 验证实际原生程序的保存、主题、导出和全屏
+```
+
+输出目录 `release/system-webview/`，文件名增加 `-system-webview`，Windows 同样提供安装程序和免安装 EXE，macOS 提供 DMG/ZIP，Linux 提供 TAR.GZ/DEB。Linux 轻量版不使用会携带 WebKitGTK 的 Tauri AppImage。轻量版与 Electron 版使用独立数据目录，切换版本时用 JSON 导出、导入实验。
+
 ### Android
 
-安装 Android Studio、JDK 21、SDK Platform 36 及 SDK Build Tools 36.0.0，并在 SDK Manager 接受相关许可证。支持 Android 7.0（API 24）及以上，需使用更新的 Android System WebView。完整工具要求见 [Capacitor 官方环境说明](https://capacitorjs.com/docs/getting-started/environment-setup)。
+系统 WebView 版使用 Capacitor，支持 Android 7.0（API 24）及以上，需使用更新的 Android System WebView。内置内核版使用 GeckoView，支持 Android 8.0（API 26）及以上，无需系统 WebView，体积较大。构建需要 Android Studio、JDK 21、SDK Platform 36、37 及 SDK Build Tools 36.0.0，并在 SDK Manager 接受相关许可证。环境说明见 [Capacitor](https://capacitorjs.com/docs/getting-started/environment-setup) 与 [GeckoView](https://mozilla.github.io/geckoview/consumer/docs/geckoview-quick-start)。
 
 ```powershell
 npm ci
 npm run android:build          # 同步网页，构建可直接安装的 debug APK
+npm run android:embedded       # 构建内置 GeckoView 的 debug APK
 npm run android:open           # 同步资源并在 Android Studio 中打开原生工程
 npm run android:sync           # 仅同步网页和恢复 Gradle wrapper
 npm run test:android           # 已启动模拟器或连接设备时，验证原生保存重载和文件导出
+$env:ANDROID_SERIAL='emulator-5554' # 多设备时指定实际测试设备
+npm run test:embedded          # 验证内置内核离线运行、系统深色、保存、导出和全屏
 ```
 
-默认输出 `release/android/CircuitLab-<版本>-android-debug.apk`。首次构建会下载 Gradle、缺失的已授权 SDK 和 Maven 依赖，之后应用本身可完全离线运行。构建脚本自动查找常见位置的 SDK 和 JDK；也可设置 `ANDROID_HOME`、`JAVA_HOME`，或用 `CIRCUIT_LAB_JAVA_HOME` 单独指定打包用的 JDK。Gradle 8.14.3 可运行于 JDK 21–24；JDK 25 需要另装 JDK 21。
+默认输出 `release/android/CircuitLab-<版本>-android-debug.apk`，内置内核版文件名增加 `-embedded`。首次构建会下载 Gradle、缺失的已授权 SDK 和 Maven 依赖，之后应用本身可完全离线运行。构建脚本自动查找常见位置的 SDK 和 JDK；也可设置 `ANDROID_HOME`、`JAVA_HOME`，或用 `CIRCUIT_LAB_JAVA_HOME` 单独指定打包用的 JDK。系统版使用 Gradle 8.14.3，内置版是 `android/embedded/` 中的独立 Gradle 9.3.1 工程；统一使用 JDK 21。
 
 Android 原生代码位于 `android/`，实验保存于应用私有数据。系统返回键依次关闭对话框、取消接线、退出全屏或收起侧栏，最后将应用移至后台。导出实验及备份通过 Android 的「另存为」选择位置，无需存储权限；文件导入沿用系统文件选择器。应用隐藏时立即保存草稿。
 
@@ -57,21 +76,21 @@ Android 原生代码位于 `android/`，实验保存于应用私有数据。系�
 | `ANDROID_KEY_ALIAS` | 密钥别名 |
 | `ANDROID_KEY_PASSWORD` | 私钥密码 |
 
-分别输出 `release/android/CircuitLab-<版本>-android-release.apk` 和 `CircuitLab-<版本>-android-release.aab`；未提供签名配置时会报错，不退回调试签名。`npm run android:ci` 一次执行 Release Lint、APK/AAB 构建及签名校验。版本名称取自 `package.json`，Android `versionCode` 使用 `主版本 × 10000 + 次版本 × 100 + 修订版本`（次版本、修订版本均须小于 100）。
+分别输出 `release/android/CircuitLab-<版本>-android-release.apk` 和 `CircuitLab-<版本>-android-release.aab`；加 `-- --embedded` 构建内置内核正式包。未提供签名配置时会报错，不退回调试签名。`npm run android:ci` 一次执行两种版本的 Release Lint、APK/AAB 构建及签名校验。版本名称取自 `package.json`，Android `versionCode` 使用 `主版本 × 10000 + 次版本 × 100 + 修订版本`（次版本、修订版本均须小于 100）。
 
-Android 正式包与旧调试包的签名不同，首次切换请先在设置中导出实验备份，再卸载调试版、安装正式版并导入备份。之后的正式版本复用同一密钥，可覆盖升级保留数据。
+发布证书固定为已核实的 v2.9.0 证书，指纹写在 `android/release-certificate.json`；构建前核对密钥库，Actions 还核对保存的公钥，任何不匹配都会停止。v2.8.2 与 v2.9.0 的官方 release APK 证书相同，v2.8.2 附件也已重新签署核实；旧 debug APK 使用不同签名。旧调试包首次切换请先导出实验备份，再卸载旧调试版并安装正式版。自 v2.9.1 起调试版使用 `.debug` 独立包名，可与正式版共存。系统版 `io.circuitlab.app`、内置版 `io.circuitlab.app.embedded` 也可共存，实验数据独立，切换时通过 JSON 迁移；同一种正式版本可覆盖升级保留数据。
 
 ### Git 与构建产物
 
-只管理源码、文本配置和 `package-lock.json`。`release/`、`artifacts/`、`node_modules/`、Android 构建缓存、机器路径、签名密钥以及 EXE/APK/AAB/JAR/压缩包均已忽略。原生图标使用可提交的 SVG/XML；Gradle wrapper JAR 不提交，`android:sync` 和构建脚本会从 Gradle 官方仓库恢复并校验固定 SHA-256，Gradle 分发包也校验 SHA-256。克隆后先运行 `npm ci` 和 `npm run android:sync`，再从 Android Studio 构建。
+只管理源码、文本配置、`package-lock.json` 和 `src-tauri/Cargo.lock`。`.openai/`、`release/`、`artifacts/`、`node_modules/`、Rust/Android 构建缓存、机器路径、签名密钥以及 EXE/APK/AAB/JAR/压缩包均已忽略。原生图标使用可提交的 SVG/XML；Gradle wrapper JAR 不提交，构建脚本会从 Gradle 官方仓库恢复并校验固定 SHA-256，Gradle 分发包也校验 SHA-256。克隆后先运行 `npm ci` 和 `npm run android:sync`，再从 Android Studio 构建。
 
 ## GitHub Actions 自动检查与发版
 
 日常流程：修改源码 → 提交 PR 或推送 `main` → CI 检查 → 推送版本标签 → 自动构建并公开 [GitHub Release](https://github.com/az7627/circuit-lab/releases)。npm 发布暂缓，根包保持 `private: true`。
 
-`CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及 Electron 启动检查。`Build and Release` 工作流在对应系统分别构建 Windows 安装版/免安装版、macOS 两种架构的 DMG/ZIP、Linux AppImage/DEB，并在 Ubuntu 使用 JDK 21、SDK 36 构建正式 Android APK/AAB、运行 Lint 和签名校验。桌面检查使用 Playwright 启动实际打包的程序，验证本地页面、14 种元件、沙盒、全屏、完整重启恢复、JSON 导入导出与窄屏布局。Linux 使用 Xvfb/Openbox 虚拟显示环境，保留沙盒。Android CI 不启动模拟器。
+`CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及 Electron 启动检查。`Build and Release` 工作流在对应系统分别构建 Electron 与系统 WebView 两种桌面版本，并在 Ubuntu 构建系统 WebView、内置 GeckoView 两种正式 Android APK/AAB、运行 Lint 和签名校验。桌面检查启动实际打包程序，验证本地页面、14 种元件、全屏、重载恢复、JSON 导出等功能；Electron 额外检查沙盒、完整重启和导入。Linux 使用 Xvfb/Openbox 虚拟显示环境，保留沙盒。Android CI 不启动模拟器，本地原生测试可验证两种运行时的跟随系统主题与系统栏。
 
-所有构建检查通过后，只读的附件校验任务会收齐 10 个安装包，检查文件名、完整性及非空内容；手动构建也执行此步骤。随后发布任务生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
+所有构建检查通过后，只读的附件校验任务会收齐 20 个安装包（v2.9.1 起），检查文件名、完整性及非空内容；手动构建也执行此步骤。随后发布任务生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
 
 ### 后续发布一个新版本
 
@@ -86,9 +105,9 @@ git push origin main --follow-tags
 
 在 GitHub Actions 选择 `Build and Release` → `Run workflow` 可手动构建当前分支。手动运行只提供可下载产物，不创建或公开 Release。未通过时查看对应任务日志和 diagnostics 附件；修复源码后重新构建。网络或上传问题可重跑同一标签并补齐草稿；已经公开的版本和附件不会被覆盖，代码修复需要新版本号。诊断与临时产物保留 7 天，Release 附件长期保留。
 
-### Android 发布密钥的首次接入与恢复
+### Android 发布密钥的恢复与校验
 
-Windows 上已登录 GitHub CLI 后，可运行 `pwsh -File scripts/setup-android-signing.ps1`。脚本只在密钥不存在时生成固定 RSA 4096 位密钥，已有密钥会复用；默认备份位置为用户目录 `.android/circuit-lab-signing/`，位于仓库外且仅当前用户可访问。`credentials.dpapi.xml` 的密码由 Windows DPAPI 加密，仅原 Windows 用户可解密；迁移机器前应在原用户环境将密钥和密码备份至自己的安全存储。
+Windows 上已登录 GitHub CLI 后，可运行 `pwsh -File scripts/setup-android-signing.ps1`。脚本仅使用已有 v2.9.0 密钥，缺少密钥或证书不匹配时拒绝更新 Secrets，不生成替代私钥。默认备份位置为用户目录 `.android/circuit-lab-signing/`，位于仓库外且仅当前用户可访问。`credentials.dpapi.xml` 的密码由 Windows DPAPI 加密，仅原 Windows 用户可解密；迁移机器前应在原用户环境将密钥和密码备份至自己的安全存储。
 
 脚本将以下内容写入仓库的 GitHub Actions Secrets，日志只显示名称及公开证书指纹：
 
@@ -98,6 +117,8 @@ Windows 上已登录 GitHub CLI 后，可运行 `pwsh -File scripts/setup-androi
 | `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码 |
 | `ANDROID_KEY_ALIAS` | 密钥别名 |
 | `ANDROID_KEY_PASSWORD` | 私钥密码 |
+| `ANDROID_RELEASE_PUBLIC_KEY` | 从 v2.9.0 证书核实的 SPKI PEM 公钥 |
+| `ANDROID_RELEASE_CERT_SHA256` | 从 v2.9.0 证书核实的 SHA-256 指纹 |
 
 CI 在 runner 临时目录恢复密钥，签名后删除临时文件。密钥或恢复文件丢失时不要重新生成替换已有正式签名，应从备份恢复。`npm run check:git` 在 CI 中阻止二进制、生成目录或密钥进入 Git 文件列表。
 
@@ -142,4 +163,4 @@ CI 在 runner 临时目录恢复密钥，签名后删除临时文件。密钥或
 
 电容在稳态直流时断路，理想线圈在稳态直流时短路。保险丝冷态电阻 0.2 Ω，超过可调额定电流时熔断，可在属性栏更换。
 
-部署文件位于 `dist/`，Sites 配置位于 `.openai/hosting.json`。
+部署文件位于 `dist/`，本机 Sites 配置可放在已忽略的 `.openai/hosting.json`。

@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const files = new Set(execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: root }).toString().split('\0').filter(Boolean));
 const failures = [];
 for (const file of files) {
-  if (/(^|\/)(node_modules|build|release|artifacts|\.gradle)\//.test(file) || /\.(exe|dll|dmg|ico|icns|AppImage|deb|rpm|apk|aab|jar|zip|jks|keystore|p12|pfx|key)$/i.test(file) || /(?:^|\/)(?:\.env(?:\..*)?|keystore\.properties|credentials\..*)$/.test(file)) {
+  if (/(^|\/)(node_modules|build|release|artifacts|\.gradle|\.openai|target)\//.test(file) || /\.(exe|dll|dmg|ico|icns|AppImage|deb|rpm|apk|aab|jar|zip|jks|keystore|p12|pfx|key)$/i.test(file) || /(?:^|\/)(?:\.env(?:\..*)?|keystore\.properties|credentials\..*)$/.test(file)) {
     failures.push(file);
     continue;
   }

@@ -14,12 +14,18 @@ export function androidSystemBars(bridge = globalThis.Capacitor) {
   return bars;
 }
 
+export function systemDesktop(bridge = globalThis.__TAURI__) {
+  return typeof bridge?.core?.invoke==='function'?bridge.core:null;
+}
+
 export async function saveFile(content, name, type = 'application/json') {
   const native = androidFiles();
   if (native) {
     const result = await native.saveFile({ content, name });
     return result.saved;
   }
+  const desktop=systemDesktop();
+  if(desktop)return desktop.invoke('save_experiment',{content,name});
   const url = URL.createObjectURL(new Blob([content], { type }));
   const link = document.createElement('a');
   link.href = url;

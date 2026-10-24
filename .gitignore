@@ -8,6 +8,7 @@ node_modules/
 /artifacts/
 /build/
 /src-tauri/target/
+/src-tauri/gen/schemas/
 /android/embedded/src/main/assets/app/
 *.exe
 *.dll
@@ -27,6 +28,7 @@ node_modules/
 .idea/
 **/build/
 /android/local.properties
+/android/embedded/local.properties
 /android/.kotlin/
 /android/captures/
 /android/app/src/main/assets/public/

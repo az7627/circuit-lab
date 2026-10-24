@@ -242,15 +242,15 @@ dialog[open]::backdrop{background:#29223455}
  .sidebar-open .experiment-sidebar.navigation{transform:none}
  .sidebar-scrim:not([hidden]){display:block;position:fixed;inset:var(--header-height,62px) 0 0;z-index:150;background:#3c2d4f40;backdrop-filter:blur(2px);animation:surface-in .2s}
 }
-@media(max-width:1180px){
+@media(max-width:1180px),(max-height:650px){
  .inspector{top:auto;bottom:12px;right:12px;width:min(340px,calc(100% - 24px));max-height:min(42%,280px);padding:14px}
  .properties-section>.panel-title{margin:0 0 10px}.selected-info{margin:0 0 12px}
  #componentProperties{display:grid;grid-template-columns:1fr 1fr;column-gap:14px;align-items:start}
- #componentProperties>.selected-info{grid-column:1/-1;margin:0 0 9px}
- #componentProperties>.value-input{grid-column:1;grid-row:3}
- #componentProperties>input[type="range"]{grid-column:2;grid-row:3;margin-top:10px}
- #componentProperties>.range-labels{grid-column:2;grid-row:4}
- #componentProperties>.property-actions{grid-column:2;margin-top:8px}
+ #componentProperties>.selected-info{display:none}
+ #componentProperties>.value-input{grid-column:1;grid-row:2}
+ #componentProperties>input[type="range"]{grid-column:2;grid-row:2;margin-top:10px}
+ #componentProperties>.range-labels{grid-column:2;grid-row:3}
+ #componentProperties>.property-actions{grid-column:1/-1;margin-top:6px;justify-content:flex-end}
  .node-instructions,.meter-range-info{grid-column:1/-1}
 }
 @media(max-width:740px){

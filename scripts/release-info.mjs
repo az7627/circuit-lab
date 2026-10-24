@@ -12,12 +12,19 @@ export function validateVersion(pkg, lock, ref = '') {
 }
 
 export function expectedAssets(version) {
+  const parts=version.split('.').map(Number),variants=parts[0]>2||parts[0]===2&&(parts[1]>9||parts[1]===9&&parts[2]>=1);
   return [
     `CircuitLab-${version}-windows-x64-setup.exe`,
     `CircuitLab-${version}-windows-x64-portable.exe`,
     ...['arm64', 'x64'].flatMap(arch => ['dmg', 'zip'].map(ext => `CircuitLab-${version}-macos-${arch}.${ext}`)),
     ...['AppImage', 'deb'].map(ext => `CircuitLab-${version}-linux-x64.${ext}`),
-    ...['apk', 'aab'].map(ext => `CircuitLab-${version}-android-release.${ext}`)
+    ...['apk', 'aab'].map(ext => `CircuitLab-${version}-android-release.${ext}`),
+    ...(variants?[
+      ...['setup','portable'].map(kind=>`CircuitLab-${version}-windows-x64-system-webview-${kind}.exe`),
+      ...['arm64','x64'].flatMap(arch=>['dmg','zip'].map(ext=>`CircuitLab-${version}-macos-${arch}-system-webview.${ext}`)),
+      ...['tar.gz','deb'].map(ext=>`CircuitLab-${version}-linux-x64-system-webview.${ext}`),
+      ...['apk','aab'].map(ext=>`CircuitLab-${version}-android-embedded-release.${ext}`)
+    ]:[])
   ].sort();
 }
 

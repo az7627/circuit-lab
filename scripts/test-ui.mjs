@@ -175,6 +175,8 @@ try{
   await tap({x:hit.x+hit.width/2,y:hit.y+hit.height/2});
   assert.equal(await page.locator('#propertiesSection').isVisible(),true);
   assert.equal(await page.locator('#inspector').isVisible(),true);
+  assert.equal(await page.locator('#propertiesTitle').textContent(),'电源E1');
+  assert.equal(await page.locator('#componentProperties>.selected-info').isVisible(),false);
   const mobileBoard=await boardGeometry();
   await page.screenshot({path:path.join(artifacts,'mobile-properties.png')});
   await page.emulateMedia({colorScheme:'dark'});await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');await settle();

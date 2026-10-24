@@ -133,7 +133,7 @@ jobs:
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Install required Android SDK
         shell: bash
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-36' 'platforms;android-37' 'build-tools;36.0.0'
       - name: Restore fixed signing key
         shell: bash
         env:
@@ -152,6 +152,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_RELEASE_PUBLIC_KEY: ${{ secrets.ANDROID_RELEASE_PUBLIC_KEY }}
+          ANDROID_RELEASE_CERT_SHA256: ${{ secrets.ANDROID_RELEASE_CERT_SHA256 }}
       - name: Upload packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -169,6 +171,7 @@ jobs:
           name: diagnostics-android
           path: |
             android/app/build/reports/
+            android/embedded/build/reports/
             android/build/reports/
             release/android/
           if-no-files-found: ignore
@@ -178,9 +181,61 @@ jobs:
         shell: bash
         run: rm -f "$RUNNER_TEMP/circuit-lab-release.jks"
 
+  system-webview:
+    name: Package system WebView ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows x64, os: windows-2022 }
+          - { name: macOS ARM64, os: macos-15 }
+          - { name: macOS Intel, os: macos-15-intel }
+          - { name: Linux x64, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          cache: npm
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - run: rustup override set 1.97.1
+      - name: Linux system WebView and bundle dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xvfb openbox dbus-x11 libfuse2t64
+      - run: npm ci
+      - run: npm run system:build
+      - name: Check system WebView application
+        if: runner.os != 'Linux'
+        run: npm run test:system
+      - name: Check system WebView application with virtual display
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a --server-args="-screen 0 1920x1080x24" sh -c 'openbox >/tmp/circuit-lab-system-openbox.log 2>&1 & exec npm run test:system'
+      - name: Upload system WebView packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: packages-system-webview-${{ matrix.os }}
+          path: release/system-webview/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload system WebView diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: diagnostics-system-webview-${{ matrix.os }}
+          path: artifacts/system-webview/
+          if-no-files-found: ignore
+          retention-days: 7
+
   verify:
     name: Verify complete release asset inventory
-    needs: [prepare, desktop, android]
+    needs: [prepare, desktop, android, system-webview]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
