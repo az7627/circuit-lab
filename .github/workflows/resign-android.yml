@@ -1,6 +1,9 @@
 name: Re-sign v2.8.2 Android assets
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/platform-ui-fixes]
+    paths: [.github/workflows/resign-android.yml, scripts/resign-android-2.8.2.mjs]
 permissions:
   contents: write
 jobs:
