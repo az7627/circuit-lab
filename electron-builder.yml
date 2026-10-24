@@ -42,7 +42,7 @@ linux:
   target:
     - AppImage
     - deb
-  artifactName: CircuitLab-${version}-linux-${arch}.${ext}
+  artifactName: CircuitLab-${version}-linux-x64.${ext}
   executableName: circuit-lab
   category: Education
   maintainer: az7627 <az7627@users.noreply.github.com>

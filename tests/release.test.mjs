@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { validateVersion, expectedAssets } from '../scripts/release-info.mjs';
+import { verifyAssets } from '../scripts/verify-artifacts.mjs';
 
 test('release tags and both lockfile versions must identify the same stable Android-compatible version', () => {
   const pkg = { version: '2.8.2' }, lock = { version: '2.8.2', packages: { '': { version: '2.8.2' } } };
@@ -15,4 +19,25 @@ test('a release requires both mac architectures, both desktop formats and signed
   assert.equal(files.length, 10);
   assert.equal(new Set(files).size, 10);
   for (const file of ['CircuitLab-2.8.2-macos-arm64.dmg', 'CircuitLab-2.8.2-macos-x64.zip', 'CircuitLab-2.8.2-linux-x64.deb', 'CircuitLab-2.8.2-android-release.apk', 'CircuitLab-2.8.2-android-release.aab']) assert.ok(files.includes(file));
+});
+
+test('downloaded release assets reject platform-renamed, missing, empty and unexpected packages', async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'circuit-lab-assets-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const names = expectedAssets('2.8.2');
+  await Promise.all(names.map(name => writeFile(path.join(directory, name), 'package')));
+  assert.deepEqual(await verifyAssets(directory, '2.8.2'), names);
+  const deb = path.join(directory, 'CircuitLab-2.8.2-linux-x64.deb');
+  const renamed = path.join(directory, 'CircuitLab-2.8.2-linux-amd64.deb');
+  await rename(deb, renamed);
+  await assert.rejects(verifyAssets(directory, '2.8.2'), /附件不完整/);
+  await rename(renamed, deb);
+  await writeFile(deb, '');
+  await assert.rejects(verifyAssets(directory, '2.8.2'), /附件为空/);
+  await writeFile(deb, 'package');
+  await writeFile(path.join(directory, 'unexpected.zip'), 'package');
+  await assert.rejects(verifyAssets(directory, '2.8.2'), /额外文件/);
+  await rm(path.join(directory, 'unexpected.zip'));
+  await rm(deb);
+  await assert.rejects(verifyAssets(directory, '2.8.2'), /附件不完整/);
 });

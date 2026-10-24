@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { expectedAssets, releaseInfo } from './release-info.mjs';
+import { releaseInfo } from './release-info.mjs';
+import { verifyAssets } from './verify-artifacts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 function gh(args) {
@@ -18,13 +19,10 @@ async function main() {
   const sha = execFileSync('git', ['rev-parse', `${tag}^{commit}`], { cwd: root, encoding: 'utf8' }).trim();
   if (sha !== process.env.GITHUB_SHA) throw new Error('当前提交与版本标签不一致。');
   const directory = path.join(root, 'release/collected');
-  const names = expectedAssets(version);
-  const actual = (await readdir(directory)).sort();
-  if (JSON.stringify(actual) !== JSON.stringify(names)) throw new Error(`发版附件不完整或包含额外文件。需要：${names.join(', ')}；收到：${actual.join(', ')}`);
+  const names = await verifyAssets(directory, version);
   const checksums = [];
   for (const name of names) {
     const file = path.join(directory, name);
-    if (!(await stat(file)).isFile() || (await stat(file)).size === 0) throw new Error(`附件为空：${name}`);
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(file)) hash.update(chunk);
     checksums.push(`${hash.digest('hex')}  ${name}`);

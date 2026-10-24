@@ -71,7 +71,7 @@ Android 正式包与旧调试包的签名不同，首次切换请先在设置中
 
 `CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及 Electron 启动检查。`Build and Release` 工作流在对应系统分别构建 Windows 安装版/免安装版、macOS 两种架构的 DMG/ZIP、Linux AppImage/DEB，并在 Ubuntu 使用 JDK 21、SDK 36 构建正式 Android APK/AAB、运行 Lint 和签名校验。桌面检查使用 Playwright 启动实际打包的程序，验证本地页面、14 种元件、沙盒、全屏、完整重启恢复、JSON 导入导出与窄屏布局。Linux 使用 Xvfb/Openbox 虚拟显示环境，保留沙盒。Android CI 不启动模拟器。
 
-所有构建检查通过后，发布任务收齐 10 个附件，生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
+所有构建检查通过后，只读的附件校验任务会收齐 10 个安装包，检查文件名、完整性及非空内容；手动构建也执行此步骤。随后发布任务生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
 
 ### 后续发布一个新版本
 
