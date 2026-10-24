@@ -8,7 +8,7 @@
   --board-bg:#fdfdff;--board-dot:#dfdfe9;--physical-bg:#f7f5f0;--physical-dot:#dcd9cf;
   --diagram-stroke:#8c78ac;--diagram-fill:#fdfcff;--diagram-text:#887398;
   --card-shadow:0 8px 30px #39264d15;--dialog-shadow:0 20px 90px #32274825;
-  --physical-card:#fdfcf9;--physical-card-hover:#f7f2e9;--physical-name:#63717d;--physical-value:#90969a;
+  --physical-card:#fdfcf9;--physical-card-hover:#f7f2e9;--physical-name:#63717d;--physical-value:#90969a;--physical-glass:#e9f2f6;
   --danger:#c47589;
 }
 :root[data-theme="dark"]{
@@ -20,7 +20,7 @@
   --board-bg:#141923;--board-dot:#303548;--physical-bg:#191e25;--physical-dot:#353b44;
   --diagram-stroke:#baa7df;--diagram-fill:#232b3b;--diagram-text:#c1b0dc;
   --card-shadow:0 8px 32px #0005;--dialog-shadow:0 20px 90px #0008;
-  --physical-card:#222831;--physical-card-hover:#30353e;--physical-name:#b9c4d1;--physical-value:#909caa;
+  --physical-card:#222831;--physical-card-hover:#30353e;--physical-name:#b9c4d1;--physical-value:#909caa;--physical-glass:#303e4b;
   --danger:#ed99ac;
 }
 body,.workspace,.header-panel-content{background:var(--app-bg);color:var(--text-main)}

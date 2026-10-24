@@ -43,6 +43,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            resValue "string", "app_name", "电路实验室（调试）"
+        }
         release {
             if (signingValues.values().every { it }) signingConfig signingConfigs.release
             minifyEnabled false

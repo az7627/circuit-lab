@@ -1,6 +1,6 @@
 {
   "name": "middle-school-circuit-lab",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "private": true,
   "type": "module",
   "description": "面向中学生的离线电路虚拟实验室",
@@ -41,7 +41,12 @@
     "release:check": "node scripts/release-info.mjs",
     "release:verify": "node scripts/verify-artifacts.mjs",
     "release:publish": "node scripts/publish-release.mjs",
-    "check:git": "node scripts/check-git.mjs"
+    "check:git": "node scripts/check-git.mjs",
+    "system:build": "node scripts/system-desktop.mjs build",
+    "system:dev": "node scripts/system-desktop.mjs dev",
+    "test:system": "node scripts/test-system-desktop.mjs",
+    "android:embedded": "node scripts/android.mjs debug --embedded",
+    "test:embedded": "node scripts/test-embedded-android.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
@@ -50,6 +55,7 @@
   "devDependencies": {
     "@capacitor/cli": "8.5.3",
     "@resvg/resvg-js": "2.6.2",
+    "@tauri-apps/cli": "2.12.4",
     "electron": "45.0.0",
     "electron-builder": "26.15.3",
     "playwright-core": "1.64.1"

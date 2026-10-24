@@ -1,11 +1,15 @@
 node_modules/
 *.log
 .DS_Store
+/.openai/
 
 # Native build output and downloaded tooling (keep dist/: it is the web source).
 /release/
 /artifacts/
 /build/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+/android/embedded/src/main/assets/app/
 *.exe
 *.dll
 *.dmg
@@ -24,6 +28,7 @@ node_modules/
 .idea/
 **/build/
 /android/local.properties
+/android/embedded/local.properties
 /android/.kotlin/
 /android/captures/
 /android/app/src/main/assets/public/

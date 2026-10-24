@@ -1,0 +1,57 @@
+plugins { id 'com.android.application' }
+apply from: '../variables.gradle'
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def parts = appVersion.tokenize('.').collect { it as int }
+def signingValues = [file:System.getenv('ANDROID_KEYSTORE_FILE'),password:System.getenv('ANDROID_KEYSTORE_PASSWORD'),alias:System.getenv('ANDROID_KEY_ALIAS'),keyPassword:System.getenv('ANDROID_KEY_PASSWORD')]
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name in ['assembleRelease','bundleRelease','packageRelease','signReleaseBundle'] } && !signingValues.values().every { it }) throw new GradleException('内置内核正式版必须使用固定发布密钥。')
+}
+android {
+    namespace 'io.circuitlab.embedded'
+    compileSdk 37
+    defaultConfig {
+        applicationId 'io.circuitlab.app.embedded'
+        minSdk 26
+        targetSdk rootProject.ext.targetSdkVersion
+        versionCode parts[0]*10000+parts[1]*100+parts[2]
+        versionName appVersion
+        resValue 'string','app_name','电路实验室（内置内核）'
+    }
+    signingConfigs {
+        if(signingValues.values().every { it }) release {
+            storeFile file(signingValues.file)
+            storePassword signingValues.password
+            keyAlias signingValues.alias
+            keyPassword signingValues.keyPassword
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug'; resValue 'string','app_name','电路实验室（内置内核调试）' }
+        release { if(signingValues.values().every { it }) signingConfig signingConfigs.release }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true; resValues true }
+    sourceSets { main { res.srcDirs += [layout.buildDirectory.dir('generated/shared-res').get().asFile] } }
+}
+dependencies {
+    implementation 'org.mozilla.geckoview:geckoview:158.0.20261021001945'
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.activity:activity:$androidxActivityVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+}
+tasks.register('prepareWorkbench',Copy) {
+    from('../../dist')
+    into('src/main/assets/app/app')
+}
+tasks.register('prepareNativeResources',Copy) {
+    from('../app/src/main/res') { include 'drawable/circuit_icon.xml', 'values/styles.xml' }
+    into(layout.buildDirectory.dir('generated/shared-res'))
+}
+tasks.register('prepareExtension') {
+    dependsOn 'prepareWorkbench'
+    doLast {
+        def extension = [manifest_version:2,name:'Circuit Lab Offline Workbench',version:appVersion,browser_specific_settings:[gecko:[id:'workbench@circuitlab.local']],permissions:['nativeMessaging','geckoViewAddons'],content_security_policy:"script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'"]
+        file('src/main/assets/app/manifest.json').text=groovy.json.JsonOutput.toJson(extension)
+    }
+}
+tasks.named('preBuild') { dependsOn 'prepareExtension','prepareNativeResources' }

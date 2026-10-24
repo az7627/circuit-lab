@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { androidFiles, androidSystemBars, saveFile } from '../dist/platform.js';
+import { androidFiles, androidSystemBars, systemDesktop, saveFile } from '../dist/platform.js';
 
 test('native JSON export reports save, cancellation and file provider errors', async () => {
   const original = globalThis.Capacitor;
@@ -33,4 +33,13 @@ test('immersive fullscreen uses the Android bridge for both system bars', async 
   assert.equal(androidSystemBars(null),null);
   assert.equal(androidSystemBars({getPlatform:()=> 'web'}),null);
   assert.throws(()=>androidSystemBars({getPlatform:()=> 'android'}),/全屏功能尚未就绪/);
+});
+
+test('system WebView exports go through the native save dialog and preserve cancellation',async()=>{
+ const old=globalThis.__TAURI__,calls=[];
+ try{
+  globalThis.__TAURI__={core:{invoke:async(command,args)=>{calls.push({command,args});return false;}}};
+  assert.equal(await saveFile('{"x":1}','实验.json'),false);assert.deepEqual(calls,[{command:'save_experiment',args:{content:'{"x":1}',name:'实验.json'}}]);
+  assert.equal(systemDesktop(null),null);
+ }finally{globalThis.__TAURI__=old;}
 });

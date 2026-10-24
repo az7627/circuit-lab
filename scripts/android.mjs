@@ -5,10 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import {verifyReleaseKeystore} from './android-signing.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const android = path.join(root, 'android');
 const command = process.argv[2] || 'debug';
+const modules=command==='ci'?['app','embedded']:[process.argv.includes('--embedded')?'embedded':'app'];
 const wrapperHash = '7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172';
 
 async function run(executable, args, options = {}) {
@@ -19,17 +21,19 @@ async function run(executable, args, options = {}) {
   });
 }
 
-async function ensureWrapper() {
-  const target = path.join(android, 'gradle/wrapper/gradle-wrapper.jar');
+async function ensureWrapper(module='app') {
+  const embedded=module==='embedded',version=embedded?'9.3.1':'8.14.3';
+  const expected=embedded?'b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13':wrapperHash;
+  const target = path.join(android,embedded?'embedded':'', 'gradle/wrapper/gradle-wrapper.jar');
   let jar = existsSync(target) ? await readFile(target) : null;
-  if (jar && createHash('sha256').update(jar).digest('hex') === wrapperHash) return;
-  console.log('下载 Gradle 8.14.3 wrapper（校验 SHA-256；不加入 Git）…');
-  const response = await fetch('https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar', {
+  if (jar && createHash('sha256').update(jar).digest('hex') === expected) return;
+  console.log(`下载 Gradle ${version} wrapper（校验 SHA-256；不加入 Git）…`);
+  const response = await fetch(`https://raw.githubusercontent.com/gradle/gradle/v${version}/gradle/wrapper/gradle-wrapper.jar`, {
     signal: AbortSignal.timeout(60000)
   });
   if (!response.ok) throw new Error(`Gradle wrapper 下载失败：HTTP ${response.status}`);
   jar = Buffer.from(await response.arrayBuffer());
-  if (createHash('sha256').update(jar).digest('hex') !== wrapperHash) throw new Error('Gradle wrapper SHA-256 校验失败。');
+  if (createHash('sha256').update(jar).digest('hex') !== expected) throw new Error('Gradle wrapper SHA-256 校验失败。');
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, jar);
 }
@@ -92,24 +96,29 @@ async function main() {
     return;
   }
   const jdk = await javaHome();
+  if (['release','bundle','ci'].includes(command)) verifyReleaseKeystore(jdk);
   const sdk = sdkHome();
   if (!sdk && !existsSync(path.join(android, 'local.properties'))) {
     throw new Error('未找到 Android SDK。请用 Android Studio 安装 SDK Platform 36、Build Tools 36.0.0，并设置 ANDROID_HOME。');
   }
   const env = { ...process.env, JAVA_HOME: jdk, ...(sdk ? { ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk } : {}) };
-  const tasks = command === 'ci' ? [':app:lintRelease', ':app:assembleRelease', ':app:bundleRelease'] : [{ debug: ':app:assembleDebug', release: ':app:assembleRelease', bundle: ':app:bundleRelease', test: ':app:connectedDebugAndroidTest' }[command]];
   console.log(`使用 JDK：${jdk}`);
+  for(const module of modules){
+  const directory=module==='embedded'?path.join(android,'embedded'):android;
+  await ensureWrapper(module);
+  const tasks=command==='ci'?['lintRelease','assembleRelease','bundleRelease'].map(task=>(module==='app'?':app:':':')+task):[(module==='app'?':app:':':')+{debug:'assembleDebug',release:'assembleRelease',bundle:'bundleRelease',test:'connectedDebugAndroidTest'}[command]];
   await run(path.join(jdk, 'bin', process.platform === 'win32' ? 'java.exe' : 'java'), [
-    '-classpath', path.join(android, 'gradle/wrapper/gradle-wrapper.jar'),
+    '-classpath', path.join(directory, 'gradle/wrapper/gradle-wrapper.jar'),
     'org.gradle.wrapper.GradleWrapperMain', ...tasks, '--console=plain', '--no-daemon'
-  ], { cwd: android, env });
+  ], { cwd: directory, env });
+  }
   if (command === 'test') return;
   const { version } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  for (const kind of command === 'ci' ? ['release', 'bundle'] : [command]) {
+  for (const module of modules) for (const kind of command === 'ci' ? ['release', 'bundle'] : [command]) {
     const source = kind === 'bundle' ? 'bundle/release/app-release.aab' : `apk/${kind}/app-${kind}.apk`;
-    const output = path.join(root, 'release/android', `CircuitLab-${version}-android-${kind === 'bundle' ? 'release.aab' : `${kind}.apk`}`);
+    const output = path.join(root, 'release/android', `CircuitLab-${version}-android-${module==='embedded'?'embedded-':''}${kind === 'bundle' ? 'release.aab' : `${kind}.apk`}`);
     await mkdir(path.dirname(output), { recursive: true });
-    await copyFile(path.join(android, 'app/build/outputs', source), output);
+    await copyFile(path.join(android, module+'/build/outputs', source), output);
     console.log(`已生成：${output}`);
     if (command === 'ci') {
       if (kind === 'release') {

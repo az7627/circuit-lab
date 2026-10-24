@@ -7,6 +7,8 @@ import static org.junit.Assert.*;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
+import android.content.res.Configuration;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.FileProvider;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -61,6 +63,22 @@ public class NativeAppTest {
             Thread.sleep(100);
         } while (System.currentTimeMillis() < deadline);
         assertTrue("Status and navigation bar visibility did not match " + visible, matches.get());
+    }
+
+    @Test
+    public void nativeNightThemeReachesWebViewAndManualOverrideWins() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            awaitValue(scenario,"document.querySelectorAll('[data-add]').length","14");
+            evaluate(scenario,"document.getElementById('themeSetting').value='system';document.getElementById('themeSetting').dispatchEvent(new Event('change'));");
+            for(boolean dark:new boolean[]{true,false}){
+                scenario.onActivity(activity->AppCompatDelegate.setDefaultNightMode(dark?AppCompatDelegate.MODE_NIGHT_YES:AppCompatDelegate.MODE_NIGHT_NO));
+                awaitValue(scenario,"CircuitSystemTheme.isDark()",String.valueOf(dark));
+                awaitValue(scenario,"document.documentElement.dataset.theme",dark?"\"dark\"":"\"light\"");
+            }
+            evaluate(scenario,"document.getElementById('themeSetting').value='dark';document.getElementById('themeSetting').dispatchEvent(new Event('change'));");
+            awaitValue(scenario,"document.documentElement.dataset.theme","\"dark\"");
+            evaluate(scenario,"document.getElementById('themeSetting').value='system';document.getElementById('themeSetting').dispatchEvent(new Event('change'));");
+        } finally { androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync(()->AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)); }
     }
 
     @Test
