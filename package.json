@@ -1,6 +1,6 @@
 {
   "name": "middle-school-circuit-lab",
-  "version": "2.9.1",
+  "version": "2.10.0-beta.1",
   "private": true,
   "type": "module",
   "description": "面向中学生的离线电路虚拟实验室",

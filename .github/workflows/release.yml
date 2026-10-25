@@ -26,90 +26,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - run: npm run check:git
-      - id: version
-        run: npm run release:check
-
-  desktop:
-    name: Package ${{ matrix.name }}
-    needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: Windows x64, os: windows-2022, command: 'npm run desktop:build:win' }
-          - { name: macOS ARM64, os: macos-15, command: 'npm run desktop:build:mac -- --arm64' }
-          - { name: macOS Intel, os: macos-15-intel, command: 'npm run desktop:build:mac -- --x64' }
-          - { name: Linux x64, os: ubuntu-24.04, command: 'npm run desktop:build:linux' }
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm run check:git
       - run: npm run check
       - run: npm test
-      - name: Prepare Linux display and packaging tools
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb openbox dbus-x11 libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libfuse2t64
-      - name: Build packages
-        run: ${{ matrix.command }}
-      - name: Verify macOS ad-hoc signature
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          find release/desktop -maxdepth 2 -name '*.app' -print0 | while IFS= read -r -d '' app; do
-            codesign --verify --deep --strict "$app"
-          done
-      - name: Prepare Linux packaged sandbox
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo chown root:root release/desktop/linux-unpacked/chrome-sandbox
-          sudo chmod 4755 release/desktop/linux-unpacked/chrome-sandbox
-      - name: Check packaged application
-        if: runner.os != 'Linux'
-        run: npm run test:desktop -- --packaged
-      - name: Check packaged application with virtual display
-        if: runner.os == 'Linux'
-        shell: bash
-        run: dbus-run-session -- xvfb-run -a --server-args="-screen 0 1920x1080x24" sh -c 'openbox >/tmp/circuit-lab-openbox.log 2>&1 & exec npm run test:desktop -- --packaged'
-      - name: Upload packages
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: packages-${{ matrix.os }}
-          path: |
-            release/desktop/*.exe
-            release/desktop/*.dmg
-            release/desktop/*.zip
-            release/desktop/*.AppImage
-            release/desktop/*.deb
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-      - name: Upload diagnostics and incomplete build output
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: diagnostics-${{ matrix.os }}
-          path: |
-            artifacts/desktop/
-            release/desktop/builder-debug.yml
-            release/desktop/*.exe
-            release/desktop/*.dmg
-            release/desktop/*.zip
-            release/desktop/*.AppImage
-            release/desktop/*.deb
-          if-no-files-found: ignore
-          retention-days: 7
+      - id: version
+        run: npm run release:check
 
   android:
     name: Package Android
@@ -171,7 +94,6 @@ jobs:
           name: diagnostics-android
           path: |
             android/app/build/reports/
-            android/embedded/build/reports/
             android/build/reports/
             release/android/
           if-no-files-found: ignore
@@ -218,7 +140,7 @@ jobs:
       - name: Upload system WebView packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: packages-system-webview-${{ matrix.os }}
+          name: packages-system-${{ matrix.os }}
           path: release/system-webview/*
           if-no-files-found: error
           compression-level: 0
@@ -228,14 +150,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: diagnostics-system-webview-${{ matrix.os }}
+          name: diagnostics-system-${{ matrix.os }}
           path: artifacts/system-webview/
           if-no-files-found: ignore
           retention-days: 7
 
   verify:
     name: Verify complete release asset inventory
-    needs: [prepare, desktop, android, system-webview]
+    needs: [prepare, android, system-webview]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -260,6 +182,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      pull-requests: read
+      issues: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -24,7 +24,7 @@ export function findRelease(repository, tag) {
 
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_EVENT_NAME !== 'push' || !process.env.GITHUB_REF?.startsWith('refs/tags/')) throw new Error('仅允许版本标签触发的 GitHub Actions 发布正式 Release。');
-  const { version, tag } = await releaseInfo();
+  const { version, tag, prerelease } = await releaseInfo();
   const repository = process.env.GITHUB_REPOSITORY;
   const sha = execFileSync('git', ['rev-parse', `${tag}^{commit}`], { cwd: root, encoding: 'utf8' }).trim();
   if (sha !== process.env.GITHUB_SHA) throw new Error('当前提交与版本标签不一致。');
@@ -45,9 +45,16 @@ async function main() {
     return;
   }
   if (!existing) {
-    existing = JSON.parse(gh(['api', `repos/${repository}/releases`, '--method', 'POST',
+    const createArgs = [
+      'api', `repos/${repository}/releases`, '--method', 'POST',
       '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=Circuit Lab ${tag}`,
-      '-F', 'draft=true', '-F', 'generate_release_notes=true']));
+      '-F', 'draft=true', '-F', `prerelease=${prerelease}`
+    ];
+    try {
+      existing = JSON.parse(gh([...createArgs, '-F', 'generate_release_notes=true']));
+    } catch {
+      existing = JSON.parse(gh(createArgs));
+    }
   }
   if (!existing?.draft) throw new Error('无法读取 Release 草稿，拒绝上传附件。');
   names.push('SHA256SUMS.txt');
@@ -55,15 +62,16 @@ async function main() {
   const uploaded = JSON.parse(gh(['api', `repos/${repository}/releases/${existing.id}`]));
   if (JSON.stringify(uploaded.assets.map(asset => asset.name).sort()) !== JSON.stringify([...names].sort())) throw new Error('远端 Release 附件列表不匹配，保留草稿。');
   for (const name of names) if (uploaded.assets.find(asset => asset.name === name).size !== (await stat(path.join(directory, name))).size) throw new Error(`远端附件大小不匹配：${name}`);
-  const notices = '\n\nWindows 构建未做商业代码签名；macOS 为 ad-hoc 签名，未经过 Apple 公证。Android 沿用 v2.9.0 固定发布证书；旧调试版请先导出实验备份再卸载安装。\n\n每个平台均提供两种内核选择：桌面原版内置 Chromium，带 system-webview 的轻量版使用系统 WebView（Windows 需已安装 WebView2，Linux 需 WebKitGTK 4.1）；Android 原版使用系统 WebView，带 embedded 的版本内置 GeckoView。两个版本的数据独立，可通过 JSON 导出导入迁移。\n\n附件包含 Windows x64、macOS ARM64/Intel、Linux x64 和两种 Android APK/AAB；SHA256SUMS.txt 用于校验下载文件。\n';
+  const notices = '\n\nWindows 构建未做商业代码签名；macOS 为 ad-hoc 签名，未经过 Apple 公证。桌面版和 Android 版均使用系统 WebView；Windows 需已安装 WebView2，Linux 需 WebKitGTK 4.1。Android 沿用 v2.9.0 固定发布证书；旧调试版请先导出实验备份再卸载安装。\n\n附件包含 Windows x64、macOS ARM64/Intel、Linux x64 和 Android APK/AAB；SHA256SUMS.txt 用于校验下载文件。\n';
   await mkdir(path.join(root, 'build'), { recursive: true });
   const notes = path.join(root, 'build/release-notes.md');
   let body;
-  try { body=await readFile(path.join(root,`docs/releases/${tag}.md`),'utf8'); }
-  catch(error) { if(error.code!=='ENOENT')throw error;body=(existing.body || '') + notices; }
+  try { body = await readFile(path.join(root, `docs/releases/${tag}.md`), 'utf8'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; body = (existing.body || '') + notices; }
   await writeFile(notes, body);
-  gh(['release', 'edit', tag, '--repo', repository, '--notes-file', notes, '--draft=false', '--latest']);
-  console.log(`已公开 https://github.com/${repository}/releases/tag/${tag}，共 ${names.length} 个附件。`);
+  gh(['release', 'edit', tag, '--repo', repository, '--notes-file', notes]);
+  gh(['api', `repos/${repository}/releases/${existing.id}`, '--method', 'PATCH', '-F', 'draft=false', '-F', `prerelease=${prerelease}`, '-F', `make_latest=${prerelease ? 'false' : 'true'}`]);
+  console.log(`已公开${prerelease ? '预发布' : ''} https://github.com/${repository}/releases/tag/${tag}，共 ${names.length} 个附件。`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

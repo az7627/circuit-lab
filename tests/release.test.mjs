@@ -6,12 +6,13 @@ import path from 'node:path';
 import { validateVersion, expectedAssets } from '../scripts/release-info.mjs';
 import { verifyAssets } from '../scripts/verify-artifacts.mjs';
 
-test('release tags and both lockfile versions must identify the same stable Android-compatible version', () => {
+test('release tags and both lockfile versions must identify the same Android-compatible version', () => {
   const pkg = { version: '2.8.2' }, lock = { version: '2.8.2', packages: { '': { version: '2.8.2' } } };
-  assert.deepEqual(validateVersion(pkg, lock, 'refs/tags/v2.8.2'), { version: '2.8.2', tag: 'v2.8.2' });
+  assert.deepEqual(validateVersion(pkg, lock, 'refs/tags/v2.8.2'), { version: '2.8.2', tag: 'v2.8.2', prerelease: false });
   assert.throws(() => validateVersion(pkg, lock, 'refs/tags/v2.8.1'), /标签/);
   assert.throws(() => validateVersion(pkg, { ...lock, version: '2.8.1' }), /版本不一致/);
-  for (const version of ['2.8.2-beta.1', '2.100.0', '2.8.100', '02.8.2']) assert.throws(() => validateVersion({ version }, lock), /稳定版本/);
+  assert.deepEqual(validateVersion({ version: '2.10.0-beta.1' }, { version: '2.10.0-beta.1', packages: { '': { version: '2.10.0-beta.1' } } }), { version: '2.10.0-beta.1', tag: 'v2.10.0-beta.1', prerelease: true });
+  for (const version of ['2.8.2-preview.1', '2.100.0', '2.8.100', '02.8.2']) assert.throws(() => validateVersion({ version }, lock), /版本/);
 });
 
 test('a release requires both mac architectures, both desktop formats and signed Android APK/AAB with distinct names', () => {
@@ -21,10 +22,16 @@ test('a release requires both mac architectures, both desktop formats and signed
   for (const file of ['CircuitLab-2.8.2-macos-arm64.dmg', 'CircuitLab-2.8.2-macos-x64.zip', 'CircuitLab-2.8.2-linux-x64.deb', 'CircuitLab-2.8.2-android-release.apk', 'CircuitLab-2.8.2-android-release.aab']) assert.ok(files.includes(file));
 });
 
-test('v2.9.1 requires desktop system WebView and bundled Android editions as well',()=>{
+test('v2.9.1 historical release retains both engine editions',()=>{
   const names=expectedAssets('2.9.1');assert.equal(names.length,20);assert.equal(new Set(names).size,20);
   for(const file of ['CircuitLab-2.9.1-windows-x64-system-webview-setup.exe','CircuitLab-2.9.1-macos-arm64-system-webview.zip','CircuitLab-2.9.1-linux-x64-system-webview.tar.gz','CircuitLab-2.9.1-android-embedded-release.apk'])assert.ok(names.includes(file));
   assert.ok(!names.includes('CircuitLab-2.9.1-linux-x64-system-webview.AppImage'),'The system WebView edition must not bundle WebKitGTK in an AppImage');
+});
+
+test('v2.10 prereleases contain system WebView builds only and use plain asset names',()=>{
+  const names=expectedAssets('2.10.0-beta.1');assert.equal(names.length,10);assert.equal(new Set(names).size,10);
+  assert.ok(names.every(name=>!name.includes('-system-webview')&&!name.includes('-embedded')));
+  assert.ok(names.includes('CircuitLab-2.10.0-beta.1-linux-x64.tar.gz'));
 });
 
 test('downloaded release assets reject platform-renamed, missing, empty and unexpected packages', async t => {

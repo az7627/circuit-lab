@@ -10,7 +10,7 @@ import {verifyReleaseKeystore} from './android-signing.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const android = path.join(root, 'android');
 const command = process.argv[2] || 'debug';
-const modules=command==='ci'?['app','embedded']:[process.argv.includes('--embedded')?'embedded':'app'];
+const modules=command==='ci'?['app']:[process.argv.includes('--embedded')?'embedded':'app'];
 const wrapperHash = '7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172';
 
 async function run(executable, args, options = {}) {

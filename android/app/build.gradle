@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
-def versionParts = appVersion.tokenize('.').collect { it as int }
+def versionParts = appVersion.split('-')[0].tokenize('.').collect { it as int }
 def signingValues = [
     file: System.getenv('ANDROID_KEYSTORE_FILE'),
     password: System.getenv('ANDROID_KEYSTORE_PASSWORD'),

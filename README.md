@@ -1,6 +1,6 @@
 # 电路实验室
 
-面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖。Windows、macOS、Linux 和 Android 均提供内置浏览器内核、使用系统 WebView 两种版本，网页资源均随应用打包，可离线使用。
+面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖。Windows、macOS、Linux 和 Android 均使用系统 WebView，网页资源均随应用打包，可离线使用。
 
 在仓库目录运行 `npm run dev`，打开 http://127.0.0.1:4173/ 。`npm test` 检查电路求解、导线、保存及反馈，`npm run check` 检查全部 JavaScript 模块语法。安装 Chrome 后可运行 `npm run test:ui`，检查自动保存、单行顶栏、悬浮属性、栏位收起、深浅色偏好、鼠标缩放与真实双指事件；也可设置 `CIRCUIT_LAB_BROWSER=msedge` 使用 Edge。截图保存在 `artifacts/ui/`。
 
@@ -46,24 +46,22 @@ npm run system:build          # 当前平台的系统 WebView 安装包
 npm run test:system           # 验证实际原生程序的保存、主题、导出和全屏
 ```
 
-输出目录 `release/system-webview/`，文件名增加 `-system-webview`，Windows 同样提供安装程序和免安装 EXE，macOS 提供 DMG/ZIP，Linux 提供 TAR.GZ/DEB。Linux 轻量版不使用会携带 WebKitGTK 的 Tauri AppImage。轻量版与 Electron 版使用独立数据目录，切换版本时用 JSON 导出、导入实验。
+输出目录 `release/system-webview/`，Windows 提供安装程序和免安装 EXE，macOS 提供 DMG/ZIP，Linux 提供 TAR.GZ/DEB。Linux 不使用会携带 WebKitGTK 的 Tauri AppImage。发布版均使用系统 WebView，与旧版 Electron 版本使用独立数据目录，切换时可用 JSON 导出、导入实验。
 
 ### Android
 
-系统 WebView 版使用 Capacitor，支持 Android 7.0（API 24）及以上，需使用更新的 Android System WebView。内置内核版使用 GeckoView，支持 Android 8.0（API 26）及以上，无需系统 WebView，体积较大。构建需要 Android Studio、JDK 21、SDK Platform 36、37 及 SDK Build Tools 36.0.0，并在 SDK Manager 接受相关许可证。环境说明见 [Capacitor](https://capacitorjs.com/docs/getting-started/environment-setup) 与 [GeckoView](https://mozilla.github.io/geckoview/consumer/docs/geckoview-quick-start)。
+Android 版使用 Capacitor 和系统 WebView，支持 Android 7.0（API 24）及以上，需使用更新的 Android System WebView。构建需要 Android Studio、JDK 21、SDK Platform 36、37 及 SDK Build Tools 36.0.0，并在 SDK Manager 接受相关许可证。环境说明见 [Capacitor](https://capacitorjs.com/docs/getting-started/environment-setup)。
 
 ```powershell
 npm ci
 npm run android:build          # 同步网页，构建可直接安装的 debug APK
-npm run android:embedded       # 构建内置 GeckoView 的 debug APK
 npm run android:open           # 同步资源并在 Android Studio 中打开原生工程
 npm run android:sync           # 仅同步网页和恢复 Gradle wrapper
 npm run test:android           # 已启动模拟器或连接设备时，验证原生保存重载和文件导出
 $env:ANDROID_SERIAL='emulator-5554' # 多设备时指定实际测试设备
-npm run test:embedded          # 验证内置内核离线运行、系统深色、保存、导出和全屏
 ```
 
-默认输出 `release/android/CircuitLab-<版本>-android-debug.apk`，内置内核版文件名增加 `-embedded`。首次构建会下载 Gradle、缺失的已授权 SDK 和 Maven 依赖，之后应用本身可完全离线运行。构建脚本自动查找常见位置的 SDK 和 JDK；也可设置 `ANDROID_HOME`、`JAVA_HOME`，或用 `CIRCUIT_LAB_JAVA_HOME` 单独指定打包用的 JDK。系统版使用 Gradle 8.14.3，内置版是 `android/embedded/` 中的独立 Gradle 9.3.1 工程；统一使用 JDK 21。
+默认输出 `release/android/CircuitLab-<版本>-android-debug.apk`。首次构建会下载 Gradle、缺失的已授权 SDK 和 Maven 依赖，之后应用本身可完全离线运行。构建脚本自动查找常见位置的 SDK 和 JDK；也可设置 `ANDROID_HOME`、`JAVA_HOME`，或用 `CIRCUIT_LAB_JAVA_HOME` 单独指定打包用的 JDK。使用 JDK 21。
 
 Android 原生代码位于 `android/`，实验保存于应用私有数据。系统返回键依次关闭对话框、取消接线、退出全屏或收起侧栏，最后将应用移至后台。导出实验及备份通过 Android 的「另存为」选择位置，无需存储权限；文件导入沿用系统文件选择器。应用隐藏时立即保存草稿。
 
@@ -76,9 +74,9 @@ Android 原生代码位于 `android/`，实验保存于应用私有数据。系�
 | `ANDROID_KEY_ALIAS` | 密钥别名 |
 | `ANDROID_KEY_PASSWORD` | 私钥密码 |
 
-分别输出 `release/android/CircuitLab-<版本>-android-release.apk` 和 `CircuitLab-<版本>-android-release.aab`；加 `-- --embedded` 构建内置内核正式包。未提供签名配置时会报错，不退回调试签名。`npm run android:ci` 一次执行两种版本的 Release Lint、APK/AAB 构建及签名校验。版本名称取自 `package.json`，Android `versionCode` 使用 `主版本 × 10000 + 次版本 × 100 + 修订版本`（次版本、修订版本均须小于 100）。
+分别输出 `release/android/CircuitLab-<版本>-android-release.apk` 和 `CircuitLab-<版本>-android-release.aab`。未提供签名配置时会报错，不退回调试签名。`npm run android:ci` 执行 Release Lint、APK/AAB 构建及签名校验。版本名称取自 `package.json`，Android `versionCode` 使用 `主版本 × 10000 + 次版本 × 100 + 修订版本`（次版本、修订版本均须小于 100）；预发布标记不影响 versionCode。
 
-发布证书固定为已核实的 v2.9.0 证书，指纹写在 `android/release-certificate.json`；构建前核对密钥库，Actions 还核对保存的公钥，任何不匹配都会停止。v2.8.2 与 v2.9.0 的官方 release APK 证书相同，v2.8.2 附件也已重新签署核实；旧 debug APK 使用不同签名。旧调试包首次切换请先导出实验备份，再卸载旧调试版并安装正式版。自 v2.9.1 起调试版使用 `.debug` 独立包名，可与正式版共存。系统版 `io.circuitlab.app`、内置版 `io.circuitlab.app.embedded` 也可共存，实验数据独立，切换时通过 JSON 迁移；同一种正式版本可覆盖升级保留数据。
+发布证书固定为已核实的 v2.9.0 证书，指纹写在 `android/release-certificate.json`；构建前核对密钥库，Actions 还核对保存的公钥，任何不匹配都会停止。v2.8.2 与 v2.9.0 的官方 release APK 证书相同，v2.8.2 附件也已重新签署核实；旧 debug APK 使用不同签名。旧调试包首次切换请先导出实验备份，再卸载旧调试版并安装正式版。自 v2.9.1 起调试版使用 `.debug` 独立包名，可与正式版共存。
 
 ### Git 与构建产物
 
@@ -88,9 +86,9 @@ Android 原生代码位于 `android/`，实验保存于应用私有数据。系�
 
 日常流程：修改源码 → 提交 PR 或推送 `main` → CI 检查 → 推送版本标签 → 自动构建并公开 [GitHub Release](https://github.com/az7627/circuit-lab/releases)。npm 发布暂缓，根包保持 `private: true`。
 
-`CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及 Electron 启动检查。`Build and Release` 工作流在对应系统分别构建 Electron 与系统 WebView 两种桌面版本，并在 Ubuntu 构建系统 WebView、内置 GeckoView 两种正式 Android APK/AAB、运行 Lint 和签名校验。桌面检查启动实际打包程序，验证本地页面、15 种元件、全屏、重载恢复、JSON 导出等功能；Electron 额外检查沙盒、完整重启和导入。Linux 使用 Xvfb/Openbox 虚拟显示环境，保留沙盒。Android CI 不启动模拟器，本地原生测试可验证两种运行时的跟随系统主题与系统栏。
+`CI` 工作流在 Windows x64、macOS ARM64/Intel、Ubuntu x64 上运行语法、单元测试及桌面启动检查。`Build and Release` 工作流构建 Tauri 系统 WebView 桌面版和 Android 系统 WebView APK/AAB，并运行检查、Lint 和签名校验。Linux 使用 Xvfb/Openbox 虚拟显示环境。Android CI 不启动模拟器。
 
-所有构建检查通过后，只读的附件校验任务会收齐 20 个安装包（v2.9.1 起），检查文件名、完整性及非空内容；手动构建也执行此步骤。随后发布任务生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
+所有构建检查通过后，只读的附件校验任务会收齐 10 个安装包，检查文件名、完整性及非空内容；手动构建也执行此步骤。随后发布任务生成 `SHA256SUMS.txt`，先上传草稿再公开 Release。`-alpha.N`、`-beta.N`、`-rc.N` 版本会标记为 GitHub 预发布版且不会设为 Latest；稳定版本设为 Latest。安装包仅作为 Actions 产物及 Release 附件保存，不进入 Git。构建任务只有读取权限，只有最终发布任务获得 `contents: write`；使用 GitHub 自动提供的令牌，无需手动配置 GitHub 发布 Token。官方 Actions 固定到提交 SHA。
 
 ### 后续发布一个新版本
 
@@ -101,7 +99,7 @@ npm version patch
 git push origin main --follow-tags
 ```
 
-`npm version` 自动同步包与锁文件版本、创建版本提交和 `vX.Y.Z` 标签；需要小版本/大版本时改为 `minor` / `major`。标签必须与两处版本一致，只接受稳定的数字版本，次版本和修订版本须小于 100，以保持 Android 版本号递增。
+`npm version` 自动同步包与锁文件版本、创建版本提交和标签。正式版本使用 `patch` / `minor` / `major`；预发布使用完整版本号，例如 `npm version 2.10.0-beta.1`，然后推送带 `v` 前缀的标签。标签必须与两处版本一致，次版本和修订版本须小于 100，以保持 Android 版本号递增。
 
 在 GitHub Actions 选择 `Build and Release` → `Run workflow` 可手动构建当前分支。手动运行只提供可下载产物，不创建或公开 Release。未通过时查看对应任务日志和 diagnostics 附件；修复源码后重新构建。网络或上传问题可重跑同一标签并补齐草稿；已经公开的版本和附件不会被覆盖，代码修复需要新版本号。诊断与临时产物保留 7 天，Release 附件长期保留。
 

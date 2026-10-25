@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 apply from: '../variables.gradle'
 def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
-def parts = appVersion.tokenize('.').collect { it as int }
+def parts = appVersion.split('-')[0].tokenize('.').collect { it as int }
 def signingValues = [file:System.getenv('ANDROID_KEYSTORE_FILE'),password:System.getenv('ANDROID_KEYSTORE_PASSWORD'),alias:System.getenv('ANDROID_KEY_ALIAS'),keyPassword:System.getenv('ANDROID_KEY_PASSWORD')]
 gradle.taskGraph.whenReady { graph ->
     if (graph.allTasks.any { it.project == project && it.name in ['assembleRelease','bundleRelease','packageRelease','signReleaseBundle'] } && !signingValues.values().every { it }) throw new GradleException('内置内核正式版必须使用固定发布密钥。')
