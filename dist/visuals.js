@@ -4,12 +4,13 @@ export function terminalOffset(type,index,mode='schematic') {
   if(type==='battery')return {x:index===0?54:-54,y:0};
   if(type==='ammeter'||type==='voltmeter')return mode==='physical'?{x:index===1?-32:index===2?0:32,y:34}:{x:index===1?-54:54,y:0};
   if(type==='spdt')return index===0?{x:-54,y:0}:{x:54,y:index===1?-24:24};
-  if(type==='rheostat') return index===0?{x:-54,y:18}:{x:0,y:-54};
+  if(type==='rheostat') return index===1?{x:0,y:-54}:{x:index===0?-54:54,y:18};
   if(type==='bell') return {x:index===0?-14:14,y:54};
   return {x:index===0?-54:54,y:0};
 }
 export function componentTerminal(c,index,mode='schematic') {
   const p=terminalOffset(c.type,index,mode),r=c.angle*Math.PI/180;
+  if(mode==='physical'&&c.physicalFlip)p.x=-p.x;
   return {x:c.x+p.x*Math.cos(r)-p.y*Math.sin(r),y:c.y+p.x*Math.sin(r)+p.y*Math.cos(r)};
 }
 export function labelOffset(c) {
@@ -24,7 +25,7 @@ export function componentHitBounds(c) {
   const extents={
     battery:[-54,-24,54,24],resistor:[-54,-13,54,13],
     switch:[-54,c.closed?-3:-27,54,3],spdt:[-54,-27,54,27],
-    rheostat:[-54,-54,33,18],bell:[-25,-25,25,54],
+    rheostat:[-54,-54,54,18],bell:[-25,-25,25,54],led:[-54,-32,54,16],
     heater:[-54,-35,54,15],capacitor:[-54,-23,54,23],
     inductor:[-54,-19,54,0],fuse:[-54,-12,54,12]
   }[c.type]??[-54,-26,54,26];

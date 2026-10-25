@@ -53,11 +53,23 @@ function reduceBranches(leaves,start,end) {
 }
 
 const isMeasurement=tree=>tree.kind==='leaf'?tree.component.type==='voltmeter':tree.children.every(isMeasurement);
+const branchSize=tree=>tree.kind==='leaf'?1:tree.children.reduce((sum,child)=>sum+branchSize(child),0);
+export const branchOrder=(a,b)=>branchSize(a)-branchSize(b)||ordered(a.key,b.key);
+function loadStructure(tree){
+  if(!tree)return null;
+  if(tree.kind==='leaf')return tree.component.type==='voltmeter'?null:['ammeter','switch'].includes(tree.component.type)?{kind:'connection',key:tree.key}:tree;
+  let children=tree.children.map(loadStructure).filter(Boolean);
+  if(tree.kind==='series')children=children.filter(c=>c.kind!=='connection');
+  if(!children.length)return {kind:'connection'};
+  if(children.length===1)return children[0];
+  children=children.flatMap(c=>c.kind===tree.kind?c.children:[c]);
+  return {...tree,children};
+}
 function measure(tree) {
   if(tree.kind==='leaf')return Object.assign(tree,{width:220,above:48,below:82});
   tree.children.forEach(measure);
   if(tree.kind==='series')return Object.assign(tree,{width:tree.children.reduce((n,c)=>n+c.width,0),above:Math.max(...tree.children.map(c=>c.above)),below:Math.max(...tree.children.map(c=>c.below))});
-  const main=tree.children.filter(c=>!isMeasurement(c)).sort((a,b)=>ordered(a.key,b.key)),meters=tree.children.filter(isMeasurement).sort((a,b)=>ordered(a.key,b.key));
+  const main=tree.children.filter(c=>!isMeasurement(c)).sort(branchOrder),meters=tree.children.filter(isMeasurement).sort(branchOrder);
   tree.children=[...main,...meters];tree.offsets=new Map();let above=main[0]?.above??48,below=main[0]?.below??82;
   if(main[0])tree.offsets.set(main[0],0);
   for(const child of main.slice(1)){const y=below+child.above+40;tree.offsets.set(child,y);below=y+child.below;}
@@ -113,23 +125,40 @@ function placeGeneral(edges,start,x,y,anchors,nets) {
     const [one,two]=neighbors;if(!one||!two||one===two||Math.abs(one.x-two.x)>1)continue;
     const p=componentTerminal(c,1),q=componentTerminal(c,2);if((one.y-two.y)*(p.y-q.y)<0)[one.y,two.y]=[two.y,one.y];c.y=(one.y+two.y)/2;
   }
-  for(const e of edges)for(const [net,index] of [[e.a,e.ports[0]],[e.b,e.ports[1]],...(e.component.type==='spdt'?[[nets.find(`${e.key}:2`),2]]:[])]){if(!anchors.has(net))anchors.set(net,[]);anchors.get(net).push(componentTerminal(e.component,index));}
+  for(const e of edges)for(const [net,index] of [[e.a,e.ports[0]],[e.b,e.ports[1]],...(['spdt','rheostat'].includes(e.component.type)?[[nets.find(`${e.key}:2`),2]]:[])]){if(!anchors.has(net))anchors.set(net,[]);anchors.get(net).push(componentTerminal(e.component,index));}
   return {width,bottom};
+}
+
+/** Trace the whole circuit before arranging parts: preserve every series chain,
+ * parallel branch, measurement branch and independent powered island. */
+export function analyzeCircuit(state) {
+  const nets=circuitNets(state),edges=state.components.map(c=>{
+    const positive=meter(c)&&state.wires.some(w=>w.a===`${c.id}:2`||w.b===`${c.id}:2`)?2:0;
+    const used=terminalIndices(c.type).filter(index=>state.wires.some(w=>w.a===`${c.id}:${index}`||w.b===`${c.id}:${index}`));
+    const ports=c.type==='rheostat'&&used.length===2?used.includes(1)?[used.find(i=>i!==1),1]:[0,2]:[positive,1];
+    return {kind:'leaf',component:c,key:c.id,a:nets.find(`${c.id}:${ports[0]}`),b:nets.find(`${c.id}:${ports[1]}`),ports,multiport:['spdt','rheostat'].includes(c.type)&&used.length>2};
+  }).sort((a,b)=>ordered(a.key,b.key));
+  // A second SPDT throw participates in connectivity, but the switch is placed once.
+  const connectivity=[...edges,...state.components.filter(c=>['spdt','rheostat'].includes(c.type)).map(c=>({a:nets.find(`${c.id}:0`),b:nets.find(`${c.id}:2`)}))];
+  const pending=new Set(edges),clusters=[];
+  while(pending.size){
+    const first=[...pending].find(e=>e.component.type==='battery')??[...pending][0],connected=distances(connectivity,first.a),cluster=[...pending].filter(e=>connected.has(e.a)||connected.has(e.b));cluster.forEach(e=>pending.delete(e));
+    const source=cluster.find(e=>e.component.type==='battery'&&e.a!==e.b),branches=cluster.filter(e=>e!==source),start=source?.b??first.a,end=source?.a??[...distances(branches,start)].sort((a,b)=>b[1]-a[1]||ordered(a[0],b[0]))[0]?.[0]??first.b;
+    const reducible=branches.length&&cluster.every(e=>!e.multiport&&e.component.type!=='spdt')&&branches.every(e=>e.a!==e.b),simple=reducible?reduceBranches(branches,start,end):null,bridge=reducible&&!simple?bridgeTree(branches,start,end):null,tree=simple??bridge?.tree;
+    const loadTree=loadStructure(tree),kinds=new Set(),visit=t=>{if(!t)return;kinds.add(t.kind);t.children?.forEach(visit);};visit(loadTree);
+    // For the textbook classification, ammeters are wires and voltmeters are
+    // open measurement branches. Keep the full tree as well: an ammeter may
+    // measure the shared feeder of only a subset of the parallel loads.
+    const kind=!tree?'general':bridge?'bridge':kinds.has('parallel')?(kinds.has('connection')?'bypassed':kinds.has('series')?'mixed':'parallel'):'series';
+    clusters.push({source,branches,edges:cluster,start,end,tree,bridge,kind,loadTree});
+  }
+  return {nets,clusters};
 }
 
 /** Trace nodes first, then place series chains and parallel branches independently of cable shape. */
 export function layoutSchematic(state) {
-  const nets=circuitNets(state),anchors=new Map(),edges=state.components.map(c=>{
-    const positive=meter(c)&&state.wires.some(w=>w.a===`${c.id}:2`||w.b===`${c.id}:2`)?2:0;
-    return {kind:'leaf',component:c,key:c.id,a:nets.find(`${c.id}:${positive}`),b:nets.find(`${c.id}:1`),ports:[positive,1]};
-  }).sort((a,b)=>ordered(a.key,b.key));
-  // A second SPDT throw participates in connectivity, but the switch is placed once.
-  const connectivity=[...edges,...state.components.filter(c=>c.type==='spdt').map(c=>({a:nets.find(`${c.id}:0`),b:nets.find(`${c.id}:2`)}))];
-  const pending=new Set(edges);let top=80;
-  while(pending.size){
-    const first=[...pending].find(e=>e.component.type==='battery')??[...pending][0],connected=distances(connectivity,first.a),cluster=[...pending].filter(e=>connected.has(e.a)||connected.has(e.b));cluster.forEach(e=>pending.delete(e));
-    const source=cluster.find(e=>e.component.type==='battery'&&e.a!==e.b),branches=cluster.filter(e=>e!==source),start=source?.b??first.a,end=source?.a??[...distances(branches,start)].sort((a,b)=>b[1]-a[1]||ordered(a[0],b[0]))[0]?.[0]??first.b;
-    const reducible=branches.length&&cluster.every(e=>e.component.type!=='spdt')&&branches.every(e=>e.a!==e.b),simple=reducible?reduceBranches(branches,start,end):null,bridge=reducible&&!simple?bridgeTree(branches,start,end):null,tree=simple??bridge?.tree;
+  const {nets,clusters}=analyzeCircuit(state),anchors=new Map();let top=80;
+  for(const {source,branches,edges:cluster,start,end,tree,bridge} of clusters){
     let width,bottom;
     if(tree){measure(tree);const y=top+tree.above;place(tree,100,y,tree.width,anchors);if(bridge)placeBridge(bridge.edge,anchors);width=tree.width;bottom=y+tree.below;}
     else {const result=placeGeneral(branches.length?branches:source?[]:cluster,start,100,top+48,anchors,nets);width=result.width;bottom=result.bottom;}

@@ -1,7 +1,10 @@
-import {componentTerminal,componentHitBounds} from './visuals.js?v=2.6';
-import {physicalBounds,physicalObstacleBoxes} from './physical.js?v=2.6';
+import {componentTerminal,componentHitBounds,labelOffset} from './visuals.js?v=2.6';
+import {physicalBounds,physicalObstacleBoxes,physicalLabelOffset} from './physical.js?v=2.6';
 import {wirePoints,simplifyTrace} from './wiring.js?v=2.6';
-import {circuitNets,layoutSchematic,topologySignature} from './topology.js?v=2.6';
+import {circuitNets,layoutSchematic} from './topology.js?v=2.6';
+import {arrangeBench} from './bench.js';
+import {electricalSignature,directPhysicalConnections} from './connections.js';
+import {pruneLayoutCaches} from './data.js?v=2.6';
 
 const eps=1e-6,copy=p=>({x:p.x,y:p.y}),distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const inflate=(b,p)=>({x:b.x-p,y:b.y-p,width:b.width+p*2,height:b.height+p*2});
@@ -24,7 +27,8 @@ function portDirection(c,index,mode) {
   if(c.type==='battery'||['ammeter','voltmeter'].includes(c.type))d={x:index===1?-1:1,y:0};
   if(['ammeter','voltmeter'].includes(c.type)&&mode==='physical')d={x:0,y:1};
   if(c.type==='bell')d={x:0,y:1};
-  if(c.type==='rheostat')d=index===0?{x:-1,y:0}:{x:0,y:-1};
+  if(c.type==='rheostat')d=index===1?{x:0,y:-1}:{x:index===0?-1:1,y:0};
+  if(mode==='physical'&&c.physicalFlip)d.x=-d.x;
   const r=c.angle*Math.PI/180;return {x:Math.round(d.x*Math.cos(r)-d.y*Math.sin(r)),y:Math.round(d.x*Math.sin(r)+d.y*Math.cos(r))};
 }
 function boxesFor(state,mode,clearance=mode==='physical'?6:8){return state.components.flatMap(c=>(mode==='physical'?physicalObstacleBoxes(c):[componentHitBounds(c)]).map(box=>({...inflate(box,clearance),id:c.id,component:c,mode})));}
@@ -45,6 +49,10 @@ function portCorridor(p,origin,box,key) {
   if(!box?.component)return true;const d=portDirection(box.component,Number(key.split(':')[1]),box.mode),dx=p.x-origin.x,dy=p.y-origin.y,along=dx*d.x+dy*d.y,across=Math.abs(dx*d.y-dy*d.x);
   // Binding posts are external attachment points: a lead may leave the nut sideways.
   if(box.mode==='physical'&&Math.hypot(dx,dy)<=26)return true;
+  // A schematic lead may branch vertically from a horizontal terminal (or
+  // horizontally from a vertical one). The outward half-plane stays outside
+  // the symbol even though its rectangular hit target includes empty corners.
+  if(box.mode==='schematic')return along>=-eps;
   return along>=-eps&&across<=6+Math.max(0,along)*.5;
 }
 function bodyCost(points,boxes,wire,blockedSegments=null) {
@@ -75,19 +83,19 @@ function intersection(a,b,c,d) {
 }
 function trackList(tracks){return tracks.map(t=>Array.isArray(t)?{points:t,shared:[]}:t);}
 function crosses(a,b,track) {
-  let cost=0;for(let i=1;i<track.points.length;i++){const hit=intersection(a,b,track.points[i-1],track.points[i]);if(hit&&!track.shared?.some(p=>distance(p,hit)<40))cost+=hit.overlap?hit.overlap/24+1:hit.weight;}return cost;
+  let cost=0;for(let i=1;i<track.points.length;i++){const hit=intersection(a,b,track.points[i-1],track.points[i]);if(hit&&!track.shared?.some(p=>distance(p,hit)<(track.sharedRadius??40)))cost+=hit.overlap?hit.overlap/24+1:hit.weight;}return cost;
 }
 function crossingsBetween(points,track) {
-  const hits=new Set();let overlap=0;for(let i=1;i<points.length;i++)for(let j=1;j<track.points.length;j++){const hit=intersection(points[i-1],points[i],track.points[j-1],track.points[j]);if(!hit||track.shared?.some(p=>distance(p,hit)<40))continue;if(hit.overlap)overlap+=hit.overlap;else hits.add(`${Math.round(hit.x*100)}:${Math.round(hit.y*100)}`);}
+  const hits=new Set();let overlap=0;for(let i=1;i<points.length;i++)for(let j=1;j<track.points.length;j++){const hit=intersection(points[i-1],points[i],track.points[j-1],track.points[j]);if(!hit||track.shared?.some(p=>distance(p,hit)<(track.sharedRadius??40)))continue;if(hit.overlap)overlap+=hit.overlap;else hits.add(`${Math.round(hit.x*100)}:${Math.round(hit.y*100)}`);}
   return hits.size+overlap/24;
 }
-function peers(wire,routes,nets,mode) {
+function peers(wire,routes,nets,mode,sharedRadius=40) {
   const net=nets.find(wire.a),own=[wire.a,wire.b];
-  return routes.filter(r=>r.wire.id!==wire.id&&(mode==='physical'||nets.find(r.wire.a)!==net)).map(r=>({points:r.points,shared:own.filter(k=>r.wire.a===k||r.wire.b===k).map(k=>r.points[r.wire.a===k?0:r.points.length-1])}));
+  return routes.filter(r=>r.wire.id!==wire.id&&(mode==='physical'||nets.find(r.wire.a)!==net)).map(r=>({points:r.points,sharedRadius,shared:own.filter(k=>r.wire.a===k||r.wire.b===k).map(k=>r.points[r.wire.a===k?0:r.points.length-1])}));
 }
-export function countWireCrossings(state,mode=state.viewMode) {
+export function countWireCrossings(state,mode=state.viewMode,{sharedRadius=40}={}) {
   const nets=circuitNets(state),routes=state.wires.map(wire=>({wire,points:wirePoints(wire,k=>pointIn(state,k,mode),mode)}));let total=0;
-  for(let i=0;i<routes.length;i++)for(const track of peers(routes[i].wire,routes.slice(i+1),nets,mode))total+=crossingsBetween(routes[i].points,track);
+  for(let i=0;i<routes.length;i++)for(const track of peers(routes[i].wire,routes.slice(i+1),nets,mode,sharedRadius))total+=crossingsBetween(routes[i].points,track);
   return total;
 }
 class Heap {
@@ -171,8 +179,150 @@ function improvePairs(state,routes,nets,mode,boxes,active,polish=null) {
   }
 }
 
+const schematicPlans=new WeakMap();
+const uniqueCoordinates=values=>[...new Set(values.map(v=>Math.round(v*1000)/1000))].slice(0,40);
+function teachingLabels(state){return state.components.map(c=>{const label=physicalLabelOffset(c);return {x:c.x+label.x-48,y:c.y+label.y-19,width:96,height:27,id:`label-${c.id}`};});}
+
+/** All leads belonging to a node share one straight bus. The bus is chosen
+ * once for the entire node, independently of the order in which pairs of
+ * terminals were clicked. A terminal only gets a local hook when it faces
+ * away from its bus or a component blocks its exit. */
+function netRailPlans(state,mode,selected=null){
+  const nets=circuitNets(state),boxes=[...boxesFor(state,mode),...(mode==='physical'?teachingLabels(state):[])],groups=new Map();
+  const bendCost=mode==='schematic'?220:36;
+  const fixed=[];
+  for(const wire of [...state.wires].sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}))){const net=nets.find(wire.a);if(selected&&!selected.has(net)){fixed.push({wire,points:wirePoints(wire,k=>pointIn(state,k,mode),mode)});continue;}if(!groups.has(net))groups.set(net,[]);groups.get(net).push(wire);}
+  const plans=[];
+  for(const [net,wires] of [...groups].sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}))){
+    const ports=[...new Set(wires.flatMap(w=>[w.a,w.b]))].sort().map(key=>{
+      const p=pointIn(state,key,mode),d=direction(state,key,mode),c=state.components.find(c=>c.id===key.split(':')[0]);
+      const departures=[{d,stub:d?{x:p.x+d.x*24,y:p.y+d.y*24}:copy(p)}];
+      if(mode==='physical'&&['ammeter','voltmeter'].includes(c?.type)&&!key.endsWith(':2')){const side=key.endsWith(':1')?-1:1,r=c.angle*Math.PI/180,normal={x:side*Math.cos(r),y:side*Math.sin(r)};departures.push({d:normal,stub:{x:p.x+normal.x*24,y:p.y+normal.y*24}});}
+      return {key,p,d,departures,box:c?(mode==='physical'?physicalBounds(c):componentHitBounds(c)):null,stub:departures[0].stub};
+    });
+    const mean=axis=>Math.round(ports.reduce((sum,port)=>sum+port.p[axis],0)/ports.length/10)*10;
+    const xs=ports.map(port=>port.p.x),ys=ports.map(port=>port.p.y),left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+    const nearby=boxes.filter(b=>overlap(b,{x:left-60,y:top-60,width:right-left+120,height:bottom-top+120}));
+    const coordinates={x:uniqueCoordinates([mean('x'),...xs,...ports.map(p=>p.stub.x),left-24,right+24,...nearby.flatMap(b=>[b.x-16,b.x+b.width+16])]),y:uniqueCoordinates([mean('y'),...ys,...ports.map(p=>p.stub.y),top-24,bottom+24,...nearby.flatMap(b=>[b.y-16,b.y+b.height+16])])};
+    const candidates=[];
+    for(const axis of ['x','y'])for(const value of coordinates[axis]){
+      const other=axis==='x'?'y':'x',connectors=new Map();
+      for(const port of ports){
+        const {p,box,key}=port,paths=[];
+        for(const {stub,d} of port.departures){
+          const add=via=>{const path=simplifyTrace([p,stub,...via],.001);if(d&&path.length>1&&(path[1].x-p.x)*d.x+(path[1].y-p.y)*d.y< -eps)return;const cost=bodyCost(path,boxes,{a:key,b:'bus:0'});paths.push({points:path,anchor:path.at(-1),rank:[cost,lengthOf(path)+Math.max(0,path.length-2)*bendCost]});};
+          if(!d||Math.abs(d[axis])<eps||(value-stub[axis])*d[axis]>=-eps)add([{...stub,[axis]:value}]);
+          if(box){
+            const low=other==='y'?box.y-24:box.x-24,high=other==='y'?box.y+box.height+24:box.x+box.width+24;
+            for(const lane of [low,high])add([{...stub,[other]:lane},{[axis]:value,[other]:lane}]);
+          }
+        }
+        paths.sort((a,b)=>compare(a.rank,b.rank));if(paths[0])connectors.set(key,paths[0]);
+      }
+      if(connectors.size!==ports.length)continue;
+      const routes=wires.map(wire=>{
+        const a=connectors.get(wire.a),b=connectors.get(wire.b),points=simplifyTrace([...a.points,b.anchor,...b.points.slice(0,-1).reverse()],.001);
+        return {wire,points};
+      });
+      const anchors=[...connectors.values()].map(c=>c.anchor[other]),span=Math.max(...anchors)-Math.min(...anchors);
+      const bodies=routes.reduce((sum,r)=>sum+bodyCost(r.points,boxes,r.wire),0),style=span+[...connectors.values()].reduce((sum,c)=>sum+lengthOf(c.points)+Math.max(0,c.points.length-2)*bendCost,0);
+      candidates.push({net,routes,rank:[bodies,style],axis,value,connectors});
+    }
+    candidates.sort((a,b)=>compare(a.rank,b.rank));if(candidates.length)plans.push({net,candidates,selected:candidates[0]});
+  }
+  // Choose buses as whole nodes. Do not repair individual leads by sending them
+  // onto unrelated private lanes after a good common bus has been found.
+  for(let pass=0;pass<2;pass++)for(const plan of plans){
+    const others=[...fixed,...plans.filter(p=>p!==plan).flatMap(p=>p.selected.routes)];let best=null,rank=null;
+    for(const candidate of plan.candidates){
+      let crossings=0;for(const route of candidate.routes)for(const other of others)crossings+=crossingsBetween(route.points,{points:other.points,shared:[]});
+      const next=[candidate.rank[0],candidate.rank[1]+crossings*(mode==='physical'?500:180)];if(!rank||compare(next,rank)<0){best=candidate;rank=next;}
+    }
+    plan.selected=best;
+  }
+  return plans.flatMap(plan=>plan.selected.routes.map((route,index)=>({...route,axis:plan.selected.axis,rail:plan.selected.value,connectors:plan.selected.connectors,lane:(index-(plan.selected.routes.length-1)/2)*10})));
+}
+
+function schematicLabels(state){return state.components.map(c=>{const label=labelOffset(c);return {x:c.x+label.x-44,y:c.y+label.y-17,width:88,height:40,id:`label-${c.id}`};});}
+
+// Count shared ink once, even when several wires use the same bus. New leads
+// can tap an existing line without moving that line or creating helper nodes.
+function sharedLength(points,tracks){
+  let total=0;
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i],horizontal=Math.abs(a.y-b.y)<eps,axis=horizontal?'x':'y',other=horizontal?'y':'x',low=Math.min(a[axis],b[axis]),high=Math.max(a[axis],b[axis]),ranges=[];
+    for(const track of tracks)for(let j=1;j<track.points.length;j++){const c=track.points[j-1],d=track.points[j];if(Math.abs(c[other]-a[other])>eps||Math.abs(d[other]-a[other])>eps)continue;const start=Math.max(low,Math.min(c[axis],d[axis])),end=Math.min(high,Math.max(c[axis],d[axis]));if(end>start+eps)ranges.push([start,end]);}
+    ranges.sort((a,b)=>a[0]-b[0]);let end=-Infinity;for(const range of ranges){total+=Math.max(0,range[1]-Math.max(end,range[0]));end=Math.max(end,range[1]);}
+  }
+  return total;
+}
+
+function routeSchematicLead(state,wire){
+  const a=pointIn(state,wire.a,'schematic'),b=pointIn(state,wire.b,'schematic'),nets=circuitNets(state),net=nets.find(wire.a),boxes=[...boxesFor(state,'schematic',32),...schematicLabels(state)];
+  const others=state.wires.filter(w=>w.id!==wire.id&&w.via!==undefined).map(w=>({wire:w,points:wirePoints(w,k=>pointIn(state,k,'schematic'))})),tracks=peers(wire,others,nets,'schematic'),shared=others.filter(r=>nets.find(r.wire.a)===net);
+  const da=direction(state,wire.a,'schematic'),db=direction(state,wire.b,'schematic'),start=da?{x:a.x+da.x*24,y:a.y+da.y*24}:a,end=db?{x:b.x+db.x*24,y:b.y+db.y*24}:b;
+  let best=null,quality=null;
+  const accept=path=>{
+    const points=simplifyTrace(path,.001);if(points.length<2||!routeIsClear(points,state,wire,'schematic'))return;
+    const score=[bodyCost(points,boxes,wire),tracks.reduce((sum,t)=>sum+crossingsBetween(points,t),0),lengthOf(points)-sharedLength(points,shared)*.85+Math.max(0,points.length-2)*60];
+    if(!quality||compare(score,quality)<0){best=points;quality=score;}
+  };
+  const low={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)},high={x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)},nearby=boxes.filter(box=>overlap(box,inflate({x:low.x,y:low.y,width:high.x-low.x,height:high.y-low.y},80)));
+  const xs=uniqueCoordinates([a.x,b.x,start.x,end.x,low.x-80,high.x+80,...nearby.flatMap(box=>[box.x-2,box.x+box.width+2])]),ys=uniqueCoordinates([a.y,b.y,start.y,end.y,low.y-80,high.y+80,...nearby.flatMap(box=>[box.y-2,box.y+box.height+2])]);
+  accept([a,b]);accept([a,{x:a.x,y:b.y},b]);accept([a,{x:b.x,y:a.y},b]);
+  for(const y of ys){accept([a,{x:a.x,y},{x:b.x,y},b]);accept([a,start,{x:start.x,y},{x:end.x,y},end,b]);}
+  for(const x of xs){accept([a,{x,y:a.y},{x,y:b.y},b]);accept([a,start,{x,y:start.y},{x,y:end.y},end,b]);}
+  if(!quality||quality[0]>eps||quality[1]>eps){
+    const ports=[{owner:wire.a.split(':')[0],origin:a,d:da},{owner:wire.b.split(':')[0],origin:b,d:db}],path=routeOrthogonal(a,b,boxes,tracks,{ports,bendCost:60});if(path)accept(path);
+  }
+  if(best)wire.via=best.slice(1,-1);
+}
+
+function rememberSchematic(state,signature,automatic){
+  const ids=new Set(state.wires.map(w=>w.id));
+  schematicPlans.set(state,{signature,automatic:new Set([...automatic].filter(id=>ids.has(id))),state:{viewMode:'schematic',components:state.components.map(c=>({...c})),junctions:state.junctions.map(n=>({...n})),wires:state.wires.map(w=>({id:w.id,a:w.a,b:w.b,...(w.via!==undefined?{via:w.via.map(copy)}:{})}))}});
+  state.schematicRoutingVersion=3;
+}
+
+function editSchematic(state,options,memo,signature){
+  const previous=memo?.state,automatic=new Set(memo?.automatic??[]),old=new Map(previous?.wires.map(w=>[w.id,w])??[]);
+  const dirty=state.wires.filter(w=>options.ids?options.ids.has(w.id):w.via===undefined||!memo&&!routeIsClear(wirePoints(w,k=>pointIn(state,k,'schematic')),state,w,'schematic'));
+  const selected=new Set(),locked=new Set();
+  if(previous){
+    const before=circuitNets(previous),after=circuitNets(state),wired=new Set(previous.wires.flatMap(w=>[before.find(w.a),before.find(w.b)])),parts=new Map(state.components.map(c=>[c.id,c]));
+    for(const wire of dirty){
+      const a=before.find(wire.a),b=before.find(wire.b),prior=previous.wires.filter(w=>[a,b].includes(before.find(w.a))),endpoints=[wire.a,wire.b].map(key=>parts.get(key.split(':')[0]));
+      const anchored=old.has(wire.id)||endpoints.some(c=>!c),measurement=endpoints.some(c=>['ammeter','voltmeter'].includes(c?.type))&&(wired.has(a)||wired.has(b));
+      if(anchored||measurement||wired.has(a)&&wired.has(b)){prior.forEach(w=>locked.add(w.id));locked.add(wire.id);continue;}
+      if(!prior.length||prior.some(w=>!automatic.has(w.id)||[w.a,w.b].some(key=>!parts.has(key.split(':')[0]))))continue;
+      selected.add(after.find(wire.a));
+    }
+    for(const wire of state.wires)if(locked.has(wire.id))selected.delete(after.find(wire.a));
+  }
+  // Only extend an unfinished automatically drawn bus. A new bridge between
+  // established nodes, a measurement probe or a manual node keeps all old paths.
+  const replanned=new Set();
+  if(selected.size)for(const {wire,points} of netRailPlans(state,'schematic',selected)){if(routeIsClear(points,state,wire,'schematic')){wire.via=points.slice(1,-1);automatic.add(wire.id);replanned.add(wire.id);}}
+  for(const wire of dirty){if(replanned.has(wire.id)&&!options.ids)continue;routeSchematicLead(state,wire);automatic.add(wire.id);}
+  for(const id of locked)automatic.delete(id);
+  rememberSchematic(state,signature,automatic);
+}
+
+export function routeCircuit(state,mode=state.viewMode,options={}){
+  if(mode!=='schematic')return routeIndividualCircuit(state,mode,options);
+  const signature=JSON.stringify([state.components.map(c=>[c.id,c.type,c.x,c.y,c.angle,c.closed,c.position]),state.junctions.map(n=>[n.id,n.x,n.y]),state.wires.map(w=>[w.id,w.a,w.b])]);
+  const memo=schematicPlans.get(state);
+  if(!options.force&&!options.optimize&&memo?.signature===signature&&!options.ids&&state.wires.every(w=>w.via!==undefined))return;
+  if(!options.force&&!options.optimize&&(memo||options.preserveSchematic||options.ids))return editSchematic(state,options,memo,signature);
+  for(const {wire,points} of netRailPlans(state,mode))wire.via=points.slice(1,-1);
+  const blocked=new Set(state.wires.filter(w=>!routeIsClear(wirePoints(w,k=>pointIn(state,k),mode),state,w,mode)).map(w=>w.id));
+  if(blocked.size)routeIndividualCircuit(state,mode,{ids:blocked});
+  if(countWireCrossings(state,mode)>eps)routeIndividualCircuit(state,mode,{optimize:true});
+  rememberSchematic(state,signature,new Set(state.wires.map(w=>w.id)));
+}
+
 /** Every route sees every peer, followed by bounded rip-up / reroute passes. */
-export function routeCircuit(state,mode=state.viewMode,{force=false,ids=null,preservePhysical=false,optimize=false}={}) {
+function routeIndividualCircuit(state,mode=state.viewMode,{force=false,ids=null,preservePhysical=false,optimize=false}={}) {
   const boxes=boxesFor(state,mode),key=mode==='physical'?'physicalVia':'via',nets=circuitNets(state),routes=state.wires.map(wire=>({wire,points:wirePoints(wire,k=>pointIn(state,k,mode),mode)})).sort((a,b)=>a.wire.id.localeCompare(b.wire.id,undefined,{numeric:true})),active=new Set();
   let initializing=false;const generated=new Set(),references=new Map(routes.map(r=>[r.wire.id,r.points]));
   for(const route of routes){const {wire}=route;if(ids&&!ids.has(wire.id))continue;if(mode==='physical'&&preservePhysical&&wire[key]!==undefined)continue;
@@ -199,9 +349,128 @@ export function routeCircuit(state,mode=state.viewMode,{force=false,ids=null,pre
       improvePairs(state,routes,nets,mode,boxes,active,{ids:detours,references});
     }
   }
-  for(const {wire,points} of routes)if(active.has(wire.id))wire[key]=points.slice(1,-1);
+  for(const route of routes)if(active.has(route.wire.id)){
+    if(!routeIsClear(route.points,state,route.wire,mode)){const clear=plannedRoute(state,route.wire,mode,boxes,[]);if(clear&&routeIsClear(clear,state,route.wire,mode))route.points=clear;}
+    route.wire[key]=route.points.slice(1,-1);
+  }
 }
-function saveLayout(state,view){const poses={};for(const item of [...state.components,...state.junctions])poses[item.id]={x:item.x,y:item.y,...('angle' in item?{angle:item.angle}:{})};return {version:2,signature:topologySignature(state),poses,...(view?{view:{...view}}:{})};}
+function saveLayout(state,view,automatic=state.layouts?.[state.viewMode]?.automatic??false){const poses={};for(const item of [...state.components,...state.junctions])poses[item.id]={x:item.x,y:item.y,...('angle' in item?{angle:item.angle}:{}),...(item.physicalFlip!==undefined?{physicalFlip:item.physicalFlip}:{})};return {version:5,automatic,signature:electricalSignature(state),poses,wires:structuredClone(state.wires),junctions:structuredClone(state.junctions),...(view?{view:{...view}}:{})};}
+
+// A small set of cable lanes gives predictable work per connection. Crossing
+// penalties are finite: avoiding a crossing must not produce a canvas-size loop.
+export function routePhysicalConnections(state,{ids=null,labels=false}={}) {
+  const boxes=[...boxesFor(state,'physical',5),...(labels?teachingLabels(state):[])],routes=ids?state.wires.filter(w=>!ids.has(w.id)).map(wire=>({wire,points:wirePoints(wire,k=>pointIn(state,k,'physical'),'physical')})):[];
+  for(const wire of [...state.wires].filter(w=>!ids||ids.has(w.id)).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}))){
+    const a=pointIn(state,wire.a,'physical'),b=pointIn(state,wire.b,'physical'),da=direction(state,wire.a,'physical')??{x:0,y:0},db=direction(state,wire.b,'physical')??{x:0,y:0};
+    const start={x:a.x+da.x*24,y:a.y+da.y*24},end={x:b.x+db.x*24,y:b.y+db.y*24},candidates=[];
+    const add=via=>candidates.push(simplifyTrace([a,start,...via,end,b],.01));
+    add([]);add([{x:start.x,y:end.y}]);add([{x:end.x,y:start.y}]);
+    const left=Math.min(a.x,b.x),right=Math.max(a.x,b.x),top=Math.min(a.y,b.y),bottom=Math.max(a.y,b.y);
+    const nearby=boxes.filter(box=>overlap(inflate({x:left,y:top,width:right-left,height:bottom-top},80),box));
+    const xs=[(start.x+end.x)/2,left-32,right+32,...nearby.flatMap(box=>[box.x-10,box.x+box.width+10])];
+    const ys=[(start.y+end.y)/2,top-38,bottom+38,...nearby.flatMap(box=>[box.y-10,box.y+box.height+10])];
+    for(const x of new Set(xs))add([{x,y:start.y},{x,y:end.y}]);
+    for(const y of new Set(ys))add([{x:start.x,y},{x:end.x,y}]);
+    const tracks=routes.map(r=>({points:r.points,shared:[wire.a,wire.b].filter(k=>r.wire.a===k||r.wire.b===k).map(k=>pointIn(state,k,'physical'))}));
+    let best=null,rank=null;
+    for(const path of candidates){const cost=bodyCost(path,boxes,wire),crossings=tracks.reduce((n,t)=>n+crossingsBetween(path,t),0),score=[cost,lengthOf(path)+crossings*100+Math.max(0,path.length-2)*20];if(!rank||compare(score,rank)<0){best=path;rank=score;}}
+    if(rank[0]>eps){const fallback=routeOrthogonal(a,b,boxes,[],{startDirection:da,endDirection:db,localMargin:100,ports:[{owner:wire.a.split(':')[0],origin:a,d:da},{owner:wire.b.split(':')[0],origin:b,d:db}]});if(fallback&&bodyCost(fallback,boxes,wire)<rank[0])best=fallback;}
+    const curve=rounded(best,16);if(bodyCost(curve,boxes,wire)<=bodyCost(best,boxes,wire)+eps)best=curve;
+    wire.physicalVia=best.slice(1,-1);routes.push({wire,points:best});
+  }
+}
+function cableVisibility(state){
+  const boxes=[...boxesFor(state,'physical',3),...teachingLabels(state).map(b=>inflate(b,3))],points=[],seen=new Set();
+  for(const box of boxes)for(const x of [box.x-3,box.x+box.width+3])for(const y of [box.y-3,box.y+box.height+3]){
+    const p={x,y},key=`${Math.round(x*100)}:${Math.round(y*100)}`;if(seen.has(key)||boxes.some(b=>inside(p,b)))continue;seen.add(key);points.push(p);
+  }
+  const vertices=sparse(points,150),edges=vertices.map(()=>[]);
+  const clear=(a,b)=>!boxes.some(box=>clippedLength(a,b,box)>eps);
+  for(let i=0;i<vertices.length;i++)for(let j=i+1;j<vertices.length;j++)if(clear(vertices[i],vertices[j])){const length=distance(vertices[i],vertices[j]);edges[i].push({to:j,length});edges[j].push({to:i,length});}
+  return {boxes,vertices,edges,clear};
+}
+function cubicCable(a,b,u,v,reach,bow=0){
+  const length=distance(a,b)||1,n={x:-(b.y-a.y)/length,y:(b.x-a.x)/length};
+  const one={x:a.x+u.x*reach+n.x*bow,y:a.y+u.y*reach+n.y*bow},two={x:b.x+v.x*reach+n.x*bow,y:b.y+v.y*reach+n.y*bow};
+  return Array.from({length:25},(_,i)=>{const t=i/24,s=1-t;return {x:s*s*s*a.x+3*s*s*t*one.x+3*s*t*t*two.x+t*t*t*b.x,y:s*s*s*a.y+3*s*s*t*one.y+3*s*t*t*two.y+t*t*t*b.y};});
+}
+function cableDirections(state,key,boxes){
+  const p=pointIn(state,key,'physical'),d=direction(state,key,'physical'),c=state.components.find(c=>c.id===key.split(':')[0]);
+  if(!d)return [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+  const vectors=[0,Math.PI/6,-Math.PI/6,Math.PI/3,-Math.PI/3].map(angle=>({x:d.x*Math.cos(angle)-d.y*Math.sin(angle),y:d.x*Math.sin(angle)+d.y*Math.cos(angle)}));
+  if(['ammeter','voltmeter'].includes(c?.type)&&!key.endsWith(':2')){const r=c.angle*Math.PI/180,side=key.endsWith(':1')?-1:1;vectors.unshift({x:side*Math.cos(r),y:side*Math.sin(r)});}
+  return vectors.filter(v=>bodyCost([p,{x:p.x+v.x*36,y:p.y+v.y*36}],boxes,{a:key,b:'escape:0'})<eps);
+}
+function shortestCable(state,wire,graph,tracks){
+  const a=pointIn(state,wire.a,'physical'),b=pointIn(state,wire.b,'physical'),vertices=[...graph.vertices,a,b],start=vertices.length-2,end=vertices.length-1,edges=[...graph.edges.map(e=>[...e]),[],[]];
+  for(const [index,key,reverse] of [[start,wire.a,false],[end,wire.b,true]])for(let j=0;j<start;j++){
+    const path=reverse?[vertices[j],vertices[index]]:[vertices[index],vertices[j]];
+    if(bodyCost(path,graph.boxes,wire)>eps)continue;const length=distance(vertices[index],vertices[j]);edges[index].push({to:j,length});edges[j].push({to:index,length});
+  }
+  if(bodyCost([a,b],graph.boxes,wire)<eps){const length=distance(a,b);edges[start].push({to:end,length});edges[end].push({to:start,length});}
+  const costs=new Map(),best=Array.from({length:2},()=>new Float64Array(vertices.length).fill(Infinity)),previous=new Int32Array(vertices.length).fill(-1),heap=new Heap();best[0][start]=best[1][start]=0;heap.push({id:start,rank:[0,distance(a,b)]});
+  while(heap.values.length){const {id}=heap.pop();if(id===end)break;
+    for(const edge of edges[id]){const key=id<edge.to?`${id}:${edge.to}`:`${edge.to}:${id}`;if(!costs.has(key))costs.set(key,[tracks.reduce((sum,t)=>sum+crosses(vertices[id],vertices[edge.to],t),0),edge.length]);
+      const cost=costs.get(key),score=[best[0][id]+cost[0],best[1][id]+cost[1]];if(compare(score,best.map(layer=>layer[edge.to]))>=0)continue;score.forEach((value,i)=>best[i][edge.to]=value);previous[edge.to]=id;heap.push({id:edge.to,rank:[score[0],score[1]+distance(vertices[edge.to],b)]});
+    }
+  }
+  if(!Number.isFinite(best[0][end]))return null;
+  const points=[];for(let id=end;id>=0;id=previous[id])points.push(vertices[id]);return simplifyTrace(points.reverse(),.01);
+}
+function naturalCable(state,wire,routes,nets,graph,solids){
+  const a=pointIn(state,wire.a,'physical'),b=pointIn(state,wire.b,'physical'),chord=distance(a,b),tracks=peers(wire,routes,nets,'physical',8).map(t=>({...t,points:simplifyTrace(t.points,1.5)}));
+  const clear=points=>bodyCost(points,solids,wire)<eps,rank=points=>[tracks.reduce((sum,t)=>sum+crossingsBetween(points,t),0),lengthOf(points)];
+  let best=null,quality=null;
+  const accept=points=>{if(!points||!clear(points))return;const score=rank(points);if(!quality||compare(score,quality)<0){best=points;quality=score;}};
+  const starts=cableDirections(state,wire.a,solids),ends=cableDirections(state,wire.b,solids);
+  for(const u of starts)for(const v of ends)for(const ratio of [.24,.4,.65])for(const bow of [1,-1,0])accept(cubicCable(a,b,u,v,Math.min(210,Math.max(24,chord*ratio)),Math.min(70,chord*.16)*bow));
+  if(best&&quality[0]<eps&&quality[1]<chord*1.3+40)return best;
+  const path=shortestCable(state,wire,graph,tracks);
+  if(path){
+    if(path.length===2){const u=starts[0]??{x:(b.x-a.x)/(chord||1),y:(b.y-a.y)/(chord||1)},v=ends[0]??{x:-u.x,y:-u.y};accept(cubicCable(a,b,u,v,Math.min(70,chord*.25),12));}
+    for(const radius of [64,44,28,16,8])accept(rounded(path,radius));
+    accept(path);
+  }
+  return best;
+}
+function routeTeachingPhysical(state){
+  const graph=cableVisibility(state),solids=[...boxesFor(state,'physical',2),...teachingLabels(state).map(b=>inflate(b,2))],nets=circuitNets(state),routes=[],blocked=new Set();
+  const priority=w=>Number([w.a,w.b].some(k=>state.components.find(c=>c.id===k.split(':')[0])?.type==='battery'));
+  const ordered=[...state.wires].sort((a,b)=>priority(b)-priority(a)||distance(pointIn(state,a.a,'physical'),pointIn(state,a.b,'physical'))-distance(pointIn(state,b.a,'physical'),pointIn(state,b.b,'physical'))||a.id.localeCompare(b.id,undefined,{numeric:true}));
+  for(const wire of ordered){const points=naturalCable(state,wire,routes,nets,graph,solids);if(points){wire.physicalVia=points.slice(1,-1);routes.push({wire,points});}else blocked.add(wire.id);}
+  // A later lead may block an earlier one. Revisit only crossings, with the
+  // other complete cables as evidence, never reroute the whole bench globally.
+  for(let pass=0;pass<2;pass++)for(const route of [...routes].reverse()){
+    const tracks=peers(route.wire,routes,nets,'physical',8),before=tracks.reduce((sum,t)=>sum+crossingsBetween(route.points,t),0);if(before<eps)continue;
+    const candidate=naturalCable(state,route.wire,routes,nets,graph,solids);if(candidate&&tracks.reduce((sum,t)=>sum+crossingsBetween(candidate,t),0)<before-eps){route.points=candidate;route.wire.physicalVia=candidate.slice(1,-1);}
+  }
+  // Add cable slack only after every electrical connection has a route. Doing
+  // this greedily while adding branches can trap the next lead in a long loop.
+  for(const route of [...routes].sort((a,b)=>lengthOf(b.points)-lengthOf(a.points))){
+    const {wire}=route,a=pointIn(state,wire.a,'physical'),b=pointIn(state,wire.b,'physical'),starts=cableDirections(state,wire.a,solids),ends=cableDirections(state,wire.b,solids),tracks=peers(wire,routes,nets,'physical',8);
+    if(!starts.length||!ends.length)continue;
+    const curve=cubicCable(a,b,starts[0],ends[0],Math.min(200,Math.max(40,distance(a,b)*.45))),before=tracks.reduce((sum,t)=>sum+crossingsBetween(route.points,t),0);
+    if(bodyCost(curve,solids,wire)<eps&&tracks.reduce((sum,t)=>sum+crossingsBetween(curve,t),0)<=before+eps&&lengthOf(curve)<distance(a,b)*1.45+60){route.points=curve;wire.physicalVia=curve.slice(1,-1);}
+  }
+  if(blocked.size)routePhysicalConnections(state,{ids:blocked,labels:true});
+}
+function connectBench(state){
+  const original={wires:structuredClone(state.wires),junctions:structuredClone(state.junctions),nextId:state.nextId};
+  let best=null,quality=null;
+  // The same split/join can use any post on its electrical node. Try at most
+  // three equivalent hubs and a short post chain; never change a component's
+  // terminals or meter range. Crossings are a separate, higher priority cost.
+  for(const preference of [{},{preferLoad:true},{preferSupply:true},{preferChain:true}]){
+    Object.assign(state,structuredClone(original));directPhysicalConnections(state,preference);routeTeachingPhysical(state);
+    let detour=0,blocked=0,length=0;
+    for(const wire of state.wires){const points=wirePoints(wire,key=>pointIn(state,key,'physical'),'physical'),total=lengthOf(points);length+=total;detour+=Math.max(0,total-distance(points[0],points.at(-1))*1.6-80);blocked+=Number(!routeIsClear(points,state,wire,'physical'));}
+    const score=[blocked,countWireCrossings(state,'physical',{sharedRadius:8}),detour,length];
+    if(!quality||compare(score,quality)<0){quality=score;best={wires:state.wires,junctions:state.junctions,nextId:state.nextId};}
+    if(score[0]===0&&score[1]<eps&&score[2]<eps)break;
+  }
+  Object.assign(state,best);
+  return quality[0]===0&&quality[1]<eps;
+}
 function arrangePhysical(state,newIds) {
   const accepted=[];
   for(const c of [...state.components].sort((a,b)=>Number(newIds.has(a.id))-Number(newIds.has(b.id)))){if(newIds.has(c.id)&&['ammeter','voltmeter'].includes(c.type))c.angle=0;const bound=()=>inflate(physicalBounds(c),14);let box=bound();
@@ -212,15 +481,37 @@ function arrangePhysical(state,newIds) {
 }
 /** Cached hand layouts survive round trips; changed topology is redrawn from its nodes. */
 export function convertView(state,mode,view=null) {
-  state.layouts??={};const activeMode=state.viewMode??'schematic',legacy=activeMode==='schematic'&&state.layouts[activeMode]&&state.layouts[activeMode].version!==2;
-  state.layouts[activeMode]=saveLayout(state,view);if(legacy)state.layouts[activeMode].version=1;const cached=state.layouts[mode],newIds=new Set();
-  const rebuild=mode==='schematic'&&(!cached||cached.version!==2||cached.signature!==topologySignature(state));
-  for(const item of [...state.components,...state.junctions]){const pose=cached?.poses?.[item.id];if(pose&&!rebuild)Object.assign(item,pose);else newIds.add(item.id);}
+  const recovery=mode==='physical'?structuredClone(state):null;
+  pruneLayoutCaches(state);
+  const rejectCrossings=()=>{for(const key of Object.keys(state))if(!Object.hasOwn(recovery,key))delete state[key];Object.assign(state,recovery);throw Object.assign(new Error('暂时无法生成无交叉的实物布局，原电路已保留。'),{name:'CircuitLayoutError'});};
+  // v3 schematic poses remain useful: replace their private wire lanes with
+  // shared buses. v3 physical caches came from grid placement and must be
+  // regenerated from the circuit structure rather than certified as current.
+  state.layouts??={};const activeMode=state.viewMode??'schematic',oldVersion=state.layouts[activeMode]?.version,legacy=state.layouts[activeMode]&&![3,4,5].includes(oldVersion);
+  if(activeMode==='schematic'&&oldVersion===3)routeCircuit(state,'schematic',{force:true});
+  state.layouts[activeMode]=saveLayout(state,view);if(legacy)state.layouts[activeMode].version=1;else if(activeMode==='physical'&&[3,4].includes(oldVersion))state.layouts[activeMode].version=oldVersion;const cached=state.layouts[mode],newIds=new Set(),signature=electricalSignature(state);
+  const sameConnections=cached?.signature===signature&&(!cached.wires||!cached.junctions||electricalSignature({...state,wires:cached.wires,junctions:cached.junctions})===signature);
+  const rebuild=mode==='schematic'&&(!cached||![3,4,5].includes(cached.version)||!sameConnections);
+  const cachedPhysical=mode==='physical'&&sameConnections&&cached?.automatic!==false&&cached?.wires&&cached?.junctions?{...state,viewMode:'physical',wires:cached.wires,junctions:cached.junctions,components:state.components.map(c=>{const p=cached.poses[c.id],copy={...c,...p};if(p&&p.physicalFlip===undefined)delete copy.physicalFlip;return copy;})}:null;
+  const physicalRebuild=mode==='physical'&&(!cached||cached.version!==5||(cachedPhysical&&countWireCrossings(cachedPhysical,'physical')>eps));
+  const restore=(cached?.version===5||(mode==='schematic'&&[3,4].includes(cached?.version)))&&sameConnections&&!rebuild&&!physicalRebuild;
+  if(restore&&cached.wires&&cached.junctions){state.wires=structuredClone(cached.wires);state.junctions=structuredClone(cached.junctions);}
+  for(const item of [...state.components,...state.junctions]){const pose=cached?.poses?.[item.id];if(pose&&!rebuild){Object.assign(item,pose);if(pose.physicalFlip===undefined)delete item.physicalFlip;}else newIds.add(item.id);}
   state.viewMode=mode;
   if(rebuild){layoutSchematic(state);for(const wire of state.wires)delete wire.via;}
-  else if(mode==='physical')arrangePhysical(state,newIds);
-  routeCircuit(state,mode,{force:rebuild,preservePhysical:mode==='physical'&&Boolean(cached)});state.layouts[mode]=saveLayout(state,cached?.view);
-  return {newLayout:!cached||rebuild,view:rebuild?null:cached?.view??null};
+  else if(mode==='physical'&&!restore){
+    if(physicalRebuild){
+      const connections={wires:structuredClone(state.wires),junctions:structuredClone(state.junctions),nextId:state.nextId};let planned=false;
+      for(const variant of [{},{reverseBranches:true},{spacing:1.35}]){Object.assign(state,structuredClone(connections));arrangeBench(state,variant);if(connectBench(state)){planned=true;break;}}
+      if(!planned)rejectCrossings();
+    }
+    else{arrangePhysical(state,newIds);directPhysicalConnections(state);}
+  }
+  if(!restore&&!physicalRebuild)routeCircuit(state,mode,{force:rebuild,preservePhysical:mode==='physical'&&Boolean(cached)});
+  if(mode==='physical'&&!restore&&!physicalRebuild&&countWireCrossings(state,'physical',{sharedRadius:8})>eps&&!connectBench(state))rejectCrossings();
+  if(restore&&mode==='schematic'&&cached.version===3)routeCircuit(state,mode,{force:true});
+  state.layouts[mode]=saveLayout(state,cached?.view,mode==='physical'&&physicalRebuild?true:cached?.automatic??false);
+  return {newLayout:!cached||rebuild||physicalRebuild,view:rebuild||physicalRebuild?null:cached?.view??null};
 }
 
 function samplePath(points,step=14){const total=lengthOf(points),spacing=Math.max(step,total/240),out=[copy(points[0])];for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],steps=Math.max(1,Math.ceil(distance(a,b)/spacing));for(let j=1;j<=steps;j++)out.push({x:a.x+(b.x-a.x)*j/steps,y:a.y+(b.y-a.y)*j/steps});}return out;}

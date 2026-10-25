@@ -3,7 +3,7 @@
   const check=(value,message)=>{if(!value)throw new Error(message);};
   try{
     for(let n=0;n<100&&!document.querySelector('[data-add]');n++)await wait(100);
-    check(document.querySelectorAll('[data-add]').length===14,'元件库未加载');
+    check(document.querySelectorAll('[data-add]').length===15,'元件库未加载');
     if(!sessionStorage.getItem('system-smoke-reload')){
       document.getElementById('emptyCreateButton').click();document.getElementById('experimentNameInput').value='系统 WebView 验证';document.getElementById('nameForm').requestSubmit();
       document.querySelector('[data-add="battery"]').click();await wait(350);

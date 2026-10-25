@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createPreset,component} from '../dist/models.js';
 import {solveCircuit} from '../dist/solver.js';
-import {normalizeState} from '../dist/data.js';
-import {ExperimentStore,EXPERIMENTS_KEY,normalizeCollection} from '../dist/experiments.js';
+import {normalizeState,pruneLayoutCaches} from '../dist/data.js';
+import {ExperimentStore,EXPERIMENTS_KEY,normalizeCollection,saveErrorMessage} from '../dist/experiments.js';
+import {convertView} from '../dist/layout.js';
 import {panCamera,viewportGeometry,heaterAppearance,feedbackLevel} from '../dist/visuals.js';
 import {bellLevel} from '../dist/audio.js';
 class MemoryStorage{constructor(){this.values=new Map();this.fail=false;}getItem(k){return this.values.get(k)??null;}setItem(k,v){if(this.fail)throw new Error('QuotaExceeded');this.values.set(k,v);}}
@@ -40,6 +41,31 @@ test('creating another experiment does not destroy an existing unsaved draft',()
 test('a failed write is transactional and does not report an experiment as saved',()=>{
   const storage=new MemoryStorage(),store=new ExperimentStore(storage);store.save(createPreset('free'),'已有实验');const old=JSON.stringify(store.data);
   storage.fail=true;assert.throws(()=>store.save(createPreset('series'),'失败实验'),/Quota/);assert.equal(JSON.stringify(store.data),old);
+});
+
+test('deleting a converted component discards stale cache wiring and still saves both views',()=>{
+  for(const mode of ['physical','schematic']){
+    const state=createPreset('series');convertView(state,'physical');if(mode==='schematic')convertView(state,mode);
+    state.components=state.components.filter(c=>c.id!=='l1');state.wires=state.wires.filter(w=>!w.a.startsWith('l1:')&&!w.b.startsWith('l1:'));
+    assert.equal(normalizeState(state),null,'the old cache referenced the deleted lamp');
+    const poses=structuredClone(state.layouts[mode==='physical'?'schematic':'physical'].poses);delete poses.l1;pruneLayoutCaches(state);assert.ok(normalizeState(state));
+    assert.deepEqual(state.layouts[mode==='physical'?'schematic':'physical'].poses,poses,'surviving hand placement stays available');
+    const storage=new MemoryStorage(),store=new ExperimentStore(storage);store.save(state,'删元件后继续实验');
+    const restored=new ExperimentStore(storage).data.experiments[0].state;assert.ok(restored.components.every(c=>c.id!=='l1'));assert.equal(restored.viewMode,mode);
+    convertView(restored,mode==='physical'?'schematic':'physical');assert.ok(normalizeState(restored));
+  }
+});
+
+test('invalid circuit data is distinguished from quota and permission failures before writing',()=>{
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage);store.save(createPreset('series'),'原有实验');const before=storage.getItem(EXPERIMENTS_KEY),invalid=createPreset('free');invalid.wires=[{id:'w1',a:'missing:0',b:'missing:1'}];
+  pruneLayoutCaches(invalid);assert.equal(normalizeState(invalid),null,'cache repair must never hide a broken active circuit');
+  assert.throws(()=>store.recover(invalid),error=>error.name==='ExperimentDataError'&&saveErrorMessage(error).includes('校验未通过')&&!saveErrorMessage(error).includes('空间不足'));
+  assert.equal(storage.getItem(EXPERIMENTS_KEY),before);
+  for(const name of ['QuotaExceededError','SecurityError']){
+    const error=Object.assign(new Error('storage failure'),{name});storage.setItem=()=>{throw error;};
+    assert.throws(()=>store.recover(createPreset('free')),caught=>caught===error);assert.equal(storage.getItem(EXPERIMENTS_KEY),before);assert.equal(store.data.experiments[0].state.components.length,6);
+    assert.match(saveErrorMessage(error),name==='QuotaExceededError'?/为此应用分配的存储空间不足/:/阻止.*本地存储/);
+  }
 });
 test('separate editor instances do not overwrite each others experiment lists',()=>{
   const storage=new MemoryStorage(),a=new ExperimentStore(storage),b=new ExperimentStore(storage);a.save(createPreset('series'),'A');b.save(createPreset('parallel'),'B');

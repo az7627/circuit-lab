@@ -46,7 +46,9 @@
     "system:dev": "node scripts/system-desktop.mjs dev",
     "test:system": "node scripts/test-system-desktop.mjs",
     "android:embedded": "node scripts/android.mjs debug --embedded",
-    "test:embedded": "node scripts/test-embedded-android.mjs"
+    "test:embedded": "node scripts/test-embedded-android.mjs",
+    "test:circuits": "node scripts/test-circuits-ui.mjs",
+    "test:editing": "node scripts/test-schematic-editing-ui.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

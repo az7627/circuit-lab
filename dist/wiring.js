@@ -16,6 +16,14 @@ export function projectOnWire(wire, point, terminalPoint, mode='schematic') {
   }
   return best;
 }
+/** Snap only an intentional wire endpoint; a passing crossing stays insulated. */
+export function nearestConnection(wires,keys,point,terminalPoint,mode='schematic',tolerance=10){
+  let terminal=null;
+  for(const key of keys){const p=terminalPoint(key),distance=Math.hypot(point.x-p.x,point.y-p.y);if(distance<=tolerance&&(!terminal||distance<terminal.distance))terminal={terminal:key,point:p,distance};}
+  if(terminal)return terminal;
+  let best=null;for(const wire of wires){const hit=projectOnWire(wire,point,terminalPoint,mode);if(hit&&hit.distance<=tolerance&&(!best||hit.distance<best.distance))best={wire:wire.id,...hit};}
+  return best;
+}
 export function splitWire(wire, point, terminalPoint, junctionTerminal, secondId, mode='schematic') {
   const hit=projectOnWire(wire,point,terminalPoint,mode);
   if(!hit || same(hit.point,hit.points[0]) || same(hit.point,hit.points.at(-1))) return null;

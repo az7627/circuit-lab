@@ -5,6 +5,10 @@ import {component,createPreset} from '../dist/models.js';
 import {componentTerminal,componentBounds} from '../dist/visuals.js';
 import {normalizeState} from '../dist/data.js';
 import {ExperimentStore} from '../dist/experiments.js';
+import {convertView,countWireCrossings,pointIn,routeIsClear} from '../dist/layout.js';
+import {wirePoints} from '../dist/wiring.js';
+import {electricalSignature} from '../dist/connections.js';
+import {physicalObstacleBoxes} from '../dist/physical.js';
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 const parts=()=>[component('e1','battery',100,200,6),component('d1','spdt',300,200),component('l1','lamp',550,120,10),component('l2','lamp',550,320,20)];
 const wires=[{id:'w1',a:'e1:0',b:'d1:0'},{id:'w2',a:'d1:1',b:'l1:0'},{id:'w3',a:'d1:2',b:'l2:0'},{id:'w4',a:'l1:1',b:'e1:1'},{id:'w5',a:'l2:1',b:'e1:1'}];
@@ -22,6 +26,20 @@ test('two SPDT switches support a two-way lighting circuit for all four position
   for(const first of [1,2])for(const second of [1,2]){const components=[component('e1','battery',0,0,6),{...component('d1','spdt',100,0),position:first},{...component('d2','spdt',200,0),position:second},component('l1','lamp',300,0,10)],circuit=[{id:'w1',a:'e1:0',b:'d1:0'},{id:'w2',a:'d1:1',b:'d2:1'},{id:'w3',a:'d1:2',b:'d2:2'},{id:'w4',a:'d2:0',b:'l1:0'},{id:'w5',a:'l1:1',b:'e1:1'}],result=solveCircuit(components,circuit);
     assert.equal(result.status,first===second?'ok':'open');close(result.components.l1.current,first===second?.6:0);
   }
+});
+
+test('selector and two-way lighting convert without crossed leads or changed switch states',()=>{
+  const single=createPreset('free');single.components=parts();single.wires=structuredClone(wires);
+  const scenes=[single];
+  for(const crossed of [false,true]){const state=createPreset('free');state.components=[component('e1','battery',0,0,6),component('d1','spdt',100,0),component('d2','spdt',200,0),component('l1','lamp',300,0,10)];state.wires=[['e1:0','d1:0'],['d1:1',`d2:${crossed?2:1}`],['d1:2',`d2:${crossed?1:2}`],['d2:0','l1:0'],['l1:1','e1:1']].map(([a,b],i)=>({id:`w${i+1}`,a,b}));scenes.push(state);}
+  for(const state of scenes){const signature=electricalSignature(state);convertView(state,'physical');assert.equal(electricalSignature(state),signature);assert.equal(countWireCrossings(state,'physical',{sharedRadius:8}),0);
+    for(const w of state.wires)assert.ok(routeIsClear(wirePoints(w,k=>pointIn(state,k),'physical'),state,w),w.id);
+    const selectors=state.components.filter(c=>c.type==='spdt');for(const first of [1,2])for(const second of [1,2]){selectors[0].position=first;if(selectors[1])selectors[1].position=second;const before=solveCircuit(state.components,state.wires,state.junctions).current;convertView(state,'schematic');convertView(state,'physical');close(solveCircuit(state.components,state.wires,state.junctions).current,before);assert.equal(selectors[0].position,first);}
+  }
+});
+
+test('reflected switch contacts stay aligned with their real metal leads at every rotation',()=>{
+  for(const angle of [0,90,180,270]){const c={...component('d1','spdt',300,250),angle,physicalFlip:true},boxes=physicalObstacleBoxes(c);for(const index of [0,1,2]){const p=componentTerminal(c,index,'physical');assert.ok(boxes.some(b=>p.x>=b.x-1e-6&&p.x<=b.x+b.width+1e-6&&p.y>=b.y-1e-6&&p.y<=b.y+b.height+1e-6),`contact ${index} at ${angle}°`);}}
 });
 test('only the selected throw can short the battery',()=>{
   const components=parts().slice(0,3),circuit=[{id:'w1',a:'e1:0',b:'d1:0'},{id:'w2',a:'d1:1',b:'e1:1'},{id:'w3',a:'d1:2',b:'l1:0'},{id:'w4',a:'l1:1',b:'e1:1'}];

@@ -164,6 +164,20 @@ dialog[open]::backdrop{background:#29223455}
 .heater-glow{filter:blur(2px);pointer-events:none}
 .heater-coil{fill:none}
 .bell-body{transition:fill .25s}
+.connection-dot{fill:var(--diagram-stroke,#8c78ac);stroke:none;pointer-events:none}
+#board[data-view-mode="schematic"]:not([data-tool="junction"]) .terminal-group.connected:not(.owner-selected):not(:hover):not(:focus-visible) .terminal{opacity:0}
+.junction-anchor{fill:transparent;stroke:transparent;stroke-width:1.5}
+#board[data-tool="junction"] .junction-anchor,.junction-group:hover .junction-anchor,.junction-group.selected .junction-anchor{fill:var(--diagram-fill,#fdfcff);stroke:var(--diagram-stroke,#8c78ac)}
+.junction-anchor.pending{fill:#baa6da;stroke:#8c78ac}
+.component-model-note{font-size:11px;line-height:1.7;color:var(--muted);margin:12px 0}
+.component-controls{grid-column:1/-1;min-width:0}
+.component-physics{font-size:11px;line-height:1.8;margin:10px 0;color:var(--ink)}
+#simulationRate{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+#sliderPosition{width:100%;accent-color:var(--purple)}
+.view-mode-switch button:disabled{opacity:.8;cursor:progress}
+.bell-vibrating{animation:bell-strike var(--bell-period,.25s) linear infinite;transform-box:fill-box;transform-origin:center}
+@keyframes bell-strike{0%,45%,100%{transform:translateX(0)}15%,30%{transform:translateX(var(--bell-amplitude,2px))}}
+@media(prefers-reduced-motion:reduce){.bell-vibrating{animation:none}}
 .switch-port-label{font:10px Arial,sans-serif;fill:#9b82b3;stroke:none;text-anchor:middle;pointer-events:none}
 .spdt-options{display:flex;gap:7px;margin:16px 0 10px}
 .spdt-options .switch-action{flex:1;margin:0;padding:10px 5px;font-size:10px}

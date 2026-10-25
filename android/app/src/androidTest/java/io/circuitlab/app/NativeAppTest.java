@@ -68,7 +68,7 @@ public class NativeAppTest {
     @Test
     public void nativeNightThemeReachesWebViewAndManualOverrideWins() throws Exception {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
-            awaitValue(scenario,"document.querySelectorAll('[data-add]').length","14");
+            awaitValue(scenario,"document.querySelectorAll('[data-add]').length","15");
             evaluate(scenario,"document.getElementById('themeSetting').value='system';document.getElementById('themeSetting').dispatchEvent(new Event('change'));");
             for(boolean dark:new boolean[]{true,false}){
                 scenario.onActivity(activity->AppCompatDelegate.setDefaultNightMode(dark?AppCompatDelegate.MODE_NIGHT_YES:AppCompatDelegate.MODE_NIGHT_NO));
@@ -84,7 +84,7 @@ public class NativeAppTest {
     @Test
     public void offlineWorkbenchPersistsAndNativeJsonExportHandlesSaveAndCancel() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
-            awaitValue(scenario, "document.querySelectorAll('[data-add]').length", "14");
+            awaitValue(scenario, "document.querySelectorAll('[data-add]').length", "15");
             assertEquals("\"android\"", evaluate(scenario, "Capacitor.getPlatform()"));
             assertEquals("\"function\"", evaluate(scenario, "typeof Capacitor.Plugins.CircuitFiles.saveFile"));
             evaluate(scenario, "document.getElementById(document.getElementById('workspace').hidden?'emptyCreateButton':'newExperimentButton').click();" +

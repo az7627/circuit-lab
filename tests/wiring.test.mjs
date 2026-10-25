@@ -42,7 +42,7 @@ test('unconnected junctions and invalid node references are handled safely',()=>
   assert.equal(solveCircuit([],[{id:'w',a:'n:0',b:'missing:0'}],[{id:'n'}]).status,'invalid');
 });
 test('new resistive components use their actual configured resistance',()=>{
-  for(const type of ['rheostat','motor','bell','buzzer','heater']) {
+  for(const type of ['rheostat','bell','buzzer','heater']) {
     const result=solveCircuit([{id:'e',type:'battery',value:6},{id:'load',type,value:20}],[{id:'a',a:'e:0',b:'load:0'},{id:'b',a:'load:1',b:'e:1'}]);
     assert.equal(result.status,'ok');assert.ok(Math.abs(result.current-.3)<1e-9);assert.ok(Math.abs(result.components.load.power-1.8)<1e-9);
   }

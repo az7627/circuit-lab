@@ -52,7 +52,7 @@ async function launch() {
     window.show();
     window.focus();
   });
-  await page.waitForFunction(() => document.querySelectorAll('[data-add]').length === 14);
+  await page.waitForFunction(() => document.querySelectorAll('[data-add]').length === 15);
   assert.ok((await page.title()).includes('电路实验室'));
   assert.equal(await page.evaluate(() => typeof process), 'undefined');
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox), true);

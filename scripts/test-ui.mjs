@@ -21,7 +21,7 @@ const collection=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('circuit-
 const view=()=>page.locator('#board').evaluate(board=>({x:Number(board.dataset.cameraX),y:Number(board.dataset.cameraY),zoom:Number(board.dataset.zoom)}));
 const world=point=>page.locator('#board').evaluate((board,point)=>{const p=board.createSVGPoint();p.x=point.x;p.y=point.y;const q=p.matrixTransform(board.getScreenCTM().inverse());return {x:q.x,y:q.y};},point);
 const close=(a,b,tolerance=.02)=>assert.ok(Math.abs(a-b)<tolerance,`${a} ≠ ${b}`);
-async function open(context){page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack));await page.goto(url);await page.waitForFunction(()=>document.querySelectorAll('[data-add]').length===14);}
+async function open(context){page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack));await page.goto(url);await page.waitForFunction(()=>document.querySelectorAll('[data-add]').length===15);}
 async function create(name){await page.locator('#emptyCreateButton').click();await page.locator('#experimentNameInput').fill(name);await page.locator('#nameSubmit').click();await settle();}
 async function deselect(){const rect=await page.locator('#board').boundingBox();await page.mouse.click(rect.x+12,rect.y+70);await settle();}
 async function savedComponents(count){await page.waitForFunction(count=>{const d=JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'));return d?.experiments.find(e=>e.id===d.activeId)?.state.components.length===count;},count);}

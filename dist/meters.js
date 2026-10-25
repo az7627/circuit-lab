@@ -10,10 +10,10 @@ export function meterScale(value,range) {
   return {angle:-60+120*Math.max(-.08,Math.min(1.06,ratio)),overload:ratio>1+1e-8,reversed:ratio< -1e-8,ratio};
 }
 export function visibleTerminals(c,wires,mode) {
-  return isMeter(c.type)?(mode==='physical'?[1,2,0]:[1,meterConnection(c,wires).positive]):c.type==='spdt'?[0,1,2]:[0,1];
+  return isMeter(c.type)?(mode==='physical'?[1,2,0]:[1,meterConnection(c,wires).positive]):['spdt','rheostat'].includes(c.type)?[0,1,2]:[0,1];
 }
 export function terminalLabel(c,index,wires=[],mode='physical') {
   if(isMeter(c.type)){if(index===1)return '负接线柱 −';const range=mode==='schematic'?meterConnection(c,wires).range:meterRanges(c.type)[index===2?0:1];return `正接线柱 + ${range} ${c.type==='ammeter'?'A':'V'}`;}
   if(c.type==='battery')return index===0?'正极 +':'负极 −';
-  return c.type==='spdt'?(index===0?'公共端 C':`支路 ${index} 接线端`):c.type==='rheostat'?(index===0?'下端电阻丝':'上端滑片'):`接线端 ${index}`;
+  return c.type==='spdt'?(index===0?'公共端 C':`支路 ${index} 接线端`):c.type==='rheostat'?(index===1?'上端滑片 P':index===0?'左下固定端 A':'右下固定端 B'):c.type==='led'?(index===0?'阳极 +':'阴极 −'):`接线端 ${index}`;
 }
