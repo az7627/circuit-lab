@@ -44,6 +44,9 @@ jobs:
       - name: Check continuous current flow animations
         if: runner.os == 'Windows'
         run: npm run test:flow
+      - name: Check UI scaling and tiny readings
+        if: runner.os == 'Windows'
+        run: npm run test:preferences
       - name: Install Electron test runtime
         run: node node_modules/electron/install.js
       - name: Prepare Linux display and sandbox

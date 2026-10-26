@@ -136,6 +136,9 @@ jobs:
       - name: Check continuous current flow animations
         if: runner.os == 'Windows'
         run: npm run test:flow
+      - name: Check UI scaling and tiny readings
+        if: runner.os == 'Windows'
+        run: npm run test:preferences
       - run: npm run system:build
       - name: Check system WebView application
         if: runner.os != 'Linux'

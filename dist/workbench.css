@@ -1,7 +1,8 @@
 /* The header and both rails share the available viewport with the canvas. */
-:root{--ui-ease:cubic-bezier(.22,.8,.25,1);--ui-duration:260ms}
+:root{--ui-ease:cubic-bezier(.22,.8,.25,1);--ui-duration:260ms;--ui-scale:1}
+html{zoom:var(--ui-scale)}
 html,body{height:100%;overflow:hidden}
-body{display:flex;flex-direction:column;height:100dvh;min-height:0;background:#fff}
+body{display:flex;flex-direction:column;height:calc(100dvh / var(--ui-scale,1));min-height:0;background:#fff}
 .header-panel{display:grid;grid-template-rows:1fr;flex:none;transition:grid-template-rows var(--ui-duration) var(--ui-ease)}
 .header-panel-content{overflow:hidden;min-height:0}
 .header-collapsed .header-panel{grid-template-rows:0fr}
@@ -108,6 +109,9 @@ main{grid-column:2;padding:0;margin:0;max-width:none;width:100%;height:100%;min-
 .component-library{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:7px;flex:none;min-height:0;max-height:none;overflow:visible;padding:1px 1px 5px}
 .component-card{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:center;height:58px;gap:4px;padding:5px 2px;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .component-card.is-dragging{opacity:.45;cursor:grabbing}
+.component-card.is-drag-ready{border-color:var(--purple);background:var(--purple-soft);box-shadow:0 0 0 2px var(--purple-soft),0 4px 12px #0003}
+.component-card.is-drag-ready:active{transform:translateY(-2px) scale(1.03)}
+.component-card.is-dragging:focus{outline:none}
 .library-drag-preview{position:fixed;top:0;left:0;z-index:1000;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:76px;height:68px;border:1px solid var(--line);border-radius:10px;background:var(--raised-bg,#fff);color:var(--text-main,var(--ink));box-shadow:0 6px 22px #0003;opacity:.85}
 .library-drag-preview strong{font-size:11px;font-weight:500}
 .library-drag-preview.can-drop{border-color:var(--purple);opacity:1}
@@ -153,7 +157,7 @@ button:active:enabled{transform:translateY(1px)}
 .saved-experiment{transition:background-color .2s}
 .toggle:after{transition:transform .2s var(--ui-ease),background-color .2s}
 .toast{z-index:400;transition:opacity .22s,transform .22s var(--ui-ease)}
-dialog{max-height:90dvh;overflow:auto;opacity:0;transform:translateY(10px) scale(.98);transition:opacity .2s,transform .2s var(--ui-ease),display .2s allow-discrete,overlay .2s allow-discrete}
+dialog{max-height:calc(90dvh / var(--ui-scale,1));overflow:auto;opacity:0;transform:translateY(10px) scale(.98);transition:opacity .2s,transform .2s var(--ui-ease),display .2s allow-discrete,overlay .2s allow-discrete}
 dialog[open]{opacity:1;transform:none}
 dialog::backdrop{background:#29223400;transition:background-color .2s,display .2s allow-discrete,overlay .2s allow-discrete}
 dialog[open]::backdrop{background:#29223455}
@@ -192,7 +196,7 @@ dialog[open]::backdrop{background:#29223455}
 .experiment-menu button{display:flex;align-items:center;gap:9px;text-align:left;width:100%;padding:11px 12px;border-radius:5px;font-size:11px;color:#9682a6}
 .experiment-menu button:hover{background:#f7f2fc}
 .experiment-menu .icon{width:15px;height:15px}
-.header-menu{display:flex;flex-direction:column;gap:2px;right:8px;width:204px;max-width:calc(100vw - 16px);overflow-y:auto;overscroll-behavior:contain;transform-origin:top right}
+.header-menu{display:flex;flex-direction:column;gap:2px;right:8px;width:204px;max-width:calc(calc(100vw / var(--ui-scale,1)) - 16px);overflow-y:auto;overscroll-behavior:contain;transform-origin:top right}
 .header-menu .header-file-actions{display:contents}
 .header-menu button{justify-content:flex-start;min-height:36px;padding:8px 10px;font-size:12px}
 .header-menu button:focus-visible{outline:2px solid var(--purple);outline-offset:-2px;background:var(--hover-bg)}
@@ -202,7 +206,7 @@ dialog[open]::backdrop{background:#29223455}
 .name-input-label input{display:block;width:100%;border:1px solid #e1d8ec;border-radius:7px;padding:12px;margin-top:9px;font-size:13px;color:#695575;background:#fdfbff}
 .name-dialog .dialog-header h2{font-size:20px}
 .name-dialog .confirm-actions{margin-top:22px}
-.settings-dialog{max-width:620px;max-height:90dvh;overflow:auto}
+.settings-dialog{max-width:620px;max-height:calc(90dvh / var(--ui-scale,1));overflow:auto}
 .settings-tabs{display:flex;gap:12px;padding-bottom:13px;border-bottom:1px solid #eee8f6}
 .settings-tabs button{font-size:12px;color:#a18dad;padding:8px 12px;border-radius:6px}
 .settings-tabs button.active{background:#f0e9fc;color:#8461b8}
@@ -211,6 +215,10 @@ dialog[open]::backdrop{background:#29223455}
 .settings-row strong{font-size:12px;font-weight:500;color:#7f6b90}
 .settings-row p{font-size:10px;color:#a18daf;line-height:1.8;margin:7px 0 0}
 .settings-row .toggle-label{margin:0;flex:none}
+.ui-compact-settings .select-setting-row{flex-direction:column;align-items:stretch;gap:10px}
+.ui-compact-settings #themeSetting,.ui-compact-settings #uiScaleSetting{width:100%;max-width:none}
+.ui-compact-settings .settings-tabs{flex-direction:column;gap:4px}
+.ui-compact-settings .settings-tabs button{text-align:left}
 .volume-row label{font-size:11px;color:#8f7b9d;white-space:nowrap}
 .volume-row input{margin:0;flex:1;min-width:0;width:auto}
 .volume-row>span{font-size:10px;color:#9b82b2;min-width:35px}
@@ -257,7 +265,7 @@ dialog[open]::backdrop{background:#29223455}
 @media(min-width:1700px){.workspace{--tool-width:178px}.component-panel{padding-inline:17px}.component-card{height:62px}}
 @media(max-width:900px){
  .app-shell,body.sidebar-open .app-shell{grid-template-columns:0 minmax(0,1fr)}
- .experiment-sidebar.navigation{position:fixed;left:0;top:var(--header-height,62px);width:240px;height:calc(100dvh - var(--header-height,62px));z-index:160;box-shadow:8px 0 30px #3c2d4f12;transform:translateX(-100%)}
+ .experiment-sidebar.navigation{position:fixed;left:0;top:var(--header-height,62px);width:240px;height:calc(calc(100dvh / var(--ui-scale,1)) - var(--header-height,62px));z-index:160;box-shadow:8px 0 30px #3c2d4f12;transform:translateX(-100%)}
  .sidebar-open .experiment-sidebar.navigation{transform:none}
  .sidebar-scrim:not([hidden]){display:block;position:fixed;inset:var(--header-height,62px) 0 0;z-index:150;background:#3c2d4f40;backdrop-filter:blur(2px);animation:surface-in .2s}
 }

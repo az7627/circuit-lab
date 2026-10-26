@@ -12,6 +12,7 @@ const timer=setTimeout(()=>child.kill(),90000);
 try{
  const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve);});
  const result=JSON.parse(await readFile(report,'utf8'));assert.equal(code,0,JSON.stringify(result));assert.equal(result.error,undefined);assert.equal(result.persistence,true);assert.equal(result.export,true);assert.equal(result.fullscreen,true);assert.equal(result.currentFlow,true);
+ assert.equal(result.uiScale,1.25);
  assert.equal(JSON.parse(await readFile(exported,'utf8')).name,'系统 WebView 验证');
  await mkdir(path.join(root,'artifacts/system-webview'),{recursive:true});
  await writeFile(path.join(root,'artifacts/system-webview/report.json'),JSON.stringify(result,null,2));

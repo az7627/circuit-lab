@@ -48,11 +48,13 @@ body,.workspace,.header-panel-content{background:var(--app-bg);color:var(--text-
 .tools-section{border-color:var(--line)}
 .tool-card,.component-card{background:var(--raised-bg);border-color:var(--line);color:var(--text-main)}
 .tool-card:hover,.component-card:hover{background:var(--hover-bg);border-color:var(--purple)}
+.component-card:active{background:var(--hover-bg)}
 .tool-card.active{background:var(--purple-soft);border-color:var(--purple);color:var(--purple)}
 .history-tools button{color:var(--text-secondary)}
 .history-tools button:hover:enabled{background:var(--hover-bg);color:var(--purple)}
 .component-library[data-view-mode="physical"] .component-card{background:var(--physical-card);border-color:var(--line)}
 .component-library[data-view-mode="physical"] .component-card:hover{background:var(--physical-card-hover);border-color:var(--text-muted)}
+.component-card.is-drag-ready,.component-library[data-view-mode="physical"] .component-card.is-drag-ready{background:var(--purple-soft);border-color:var(--purple)}
 .board-wrap{background-color:var(--board-bg);background-image:radial-gradient(var(--board-dot) 1px,transparent 1px)}
 .physical-board{background-color:var(--physical-bg);background-image:radial-gradient(var(--physical-dot) .8px,transparent .8px)}
 .component-symbol{stroke:var(--diagram-stroke);fill:var(--diagram-fill)}
@@ -95,7 +97,9 @@ dialog{background:var(--panel-bg);color:var(--text-main);border-color:var(--line
 .settings-tabs button.active,.guide-tabs button.active{background:var(--purple-soft);color:var(--purple)}
 .settings-tabs span{background:var(--soft-bg);color:var(--text-secondary)}
 .settings-row p,.settings-backup p,.volume-row label,.volume-row>span{color:var(--text-secondary)}
-#themeSetting{flex:none;min-width:112px;max-width:45%;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--text-main);background:var(--raised-bg);font-size:12px}
+#themeSetting,#uiScaleSetting{flex:none;min-width:0;width:112px;max-width:45%;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--text-main);background:var(--raised-bg);font-size:12px}
+.settings-row>div{min-width:0}
+.settings-backup>div{flex-wrap:wrap}
 .toggle{background:var(--line)}
 .toggle:after{background:var(--raised-bg)}
 .guide-formula,.guide-shortcuts kbd{background:var(--purple-soft);color:var(--purple)}

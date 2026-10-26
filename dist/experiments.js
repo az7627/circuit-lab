@@ -1,6 +1,7 @@
 import {clone,normalizeState} from './data.js?v=2.6';
+import {normalizeUiScale} from './ui-scale.js';
 export const EXPERIMENTS_KEY='circuit-lab-experiments-v2';
-const defaultSettings={sound:true,volume:.35,motion:true,theme:'system'};
+const defaultSettings={sound:true,volume:.35,motion:true,theme:'system',uiScale:1};
 export function saveErrorMessage(error){
   if(['QuotaExceededError','NS_ERROR_DOM_QUOTA_REACHED'].includes(error?.name))return '浏览器为此应用分配的存储空间不足，本次修改尚未保存。请导出备份后清理不需要的实验。';
   if(['SecurityError','NotAllowedError'].includes(error?.name))return '浏览器阻止了此应用使用本地存储，本次修改尚未保存。请检查此网站的存储权限或导出备份。';
@@ -14,7 +15,7 @@ export function normalizeCollection(input){
   for(const e of input.experiments){const state=normalizeState(e?.state);if(!e||typeof e.id!=='string'||!/^[a-zA-Z0-9_-]+$/.test(e.id)||ids.has(e.id)||typeof e.name!=='string'||!e.name.trim()||e.name.length>60||!state||typeof e.archived!=='boolean')return null;ids.add(e.id);output.experiments.push({...e,state});}
   output.activeId=output.experiments.some(e=>e.id===input.activeId&&!e.archived)?input.activeId:null;
   output.draft=normalizeState(input.draft);output.draftName=typeof input.draftName==='string'&&input.draftName.length<=60?input.draftName:'未保存的实验';
-  output.settings={sound:input.settings?.sound!==false,volume:Number.isFinite(input.settings?.volume)?Math.max(0,Math.min(1,input.settings.volume)):.35,motion:input.settings?.motion!==false,theme:['system','light','dark'].includes(input.settings?.theme)?input.settings.theme:'system'};
+  output.settings={sound:input.settings?.sound!==false,volume:Number.isFinite(input.settings?.volume)?Math.max(0,Math.min(1,input.settings.volume)):.35,motion:input.settings?.motion!==false,theme:['system','light','dark'].includes(input.settings?.theme)?input.settings.theme:'system',uiScale:normalizeUiScale(input.settings?.uiScale)};
   return output;
 }
 /** All writes are transactional: a quota failure does not claim a successful save. */

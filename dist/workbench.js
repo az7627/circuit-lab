@@ -7,7 +7,7 @@ import {icons,icon} from './icons.js?v=2.9.0';
 import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera} from './visuals.js?v=2.6';
 import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute,nearestConnection} from './wiring.js?v=2.6';
 import {clone,normalizeState,pruneLayoutCaches} from './data.js?v=2.6';
-import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.9.0';
+import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.10.0-beta.4';
 import {BellAudio} from './audio.js?v=2.6';
 import {RotorMotion} from './motion.js?v=2.6';
 import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.6';
@@ -15,8 +15,10 @@ import {saveFile,androidSystemBars,systemDesktop} from './platform.js?v=2.9.1';
 import {zoomView,startPinch,movePinch} from './camera.js';
 import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js';
-import {bindLibraryDrag} from './library-drag.js';
+import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
 import {renderWireLayer} from './wire-renderer.js';
+import {displayReadings} from './readings.js';
+import {uiScale,normalizeUiScale} from './ui-scale.js';
 
 if(location.protocol==='circuit:'||globalThis.Capacitor?.getPlatform?.()==='android'){
   document.querySelector('.settings-backup p').textContent='实验保存在当前设备。导出备份可保留全部实验与归档内容。';
@@ -85,7 +87,7 @@ function updateViewport(){
   const rect=$('boardWrap').getBoundingClientRect();if(!rect.width||!rect.height)return;const v=viewportGeometry(camera,zoom,rect);
   $('board').setAttribute('viewBox',`${v.x} ${v.y} ${v.width} ${v.height}`);$('board').dataset.cameraX=camera.x;$('board').dataset.cameraY=camera.y;$('board').dataset.zoom=zoom;$('zoomLabel').textContent=`${Math.round(zoom*100)}%`;
   let step=20*v.scale;while(step<10)step*=2;while(step>48)step/=2;
-  $('boardWrap').style.backgroundSize=`${step}px ${step}px`;$('boardWrap').style.backgroundPosition=`${(rect.width/2-camera.x*v.scale)%step}px ${(rect.height/2-camera.y*v.scale)%step}px`;
+  const s=uiScale();$('boardWrap').style.backgroundSize=`${step/s}px ${step/s}px`;$('boardWrap').style.backgroundPosition=`${((rect.width/2-camera.x*v.scale)%step)/s}px ${((rect.height/2-camera.y*v.scale)%step)/s}px`;
 }
 function stopCameraAnimation(){if(cameraAnimation)cancelAnimationFrame(cameraAnimation.frame);cameraAnimation=null;}
 function applyView(view){camera={x:view.x,y:view.y};zoom=view.zoom;updateViewport();}
@@ -98,7 +100,7 @@ function animateView(next,at=null){
 }
 function setZoom(value,at=null){if(!activeId||pinch)return;const point=at?{x:at.clientX,y:at.clientY}:null;animateView(zoomView({...camera,zoom},value,$('boardWrap').getBoundingClientRect(),point),point);}
 function fitAll(){if(!activeId)return;const points=[];for(const c of state.components){const b=state.viewMode==='physical'?physicalBounds(c):componentBounds(c);points.push({x:b.x,y:b.y},{x:b.x+b.width,y:b.y+b.height});}for(const n of state.junctions)points.push({x:n.x-12,y:n.y-12},{x:n.x+12,y:n.y+12});for(const w of state.wires)points.push(...wirePoints(w,terminalPoint,state.viewMode));let bounds=null;if(points.length){let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;for(const p of points){x=Math.min(x,p.x);y=Math.min(y,p.y);right=Math.max(right,p.x);bottom=Math.max(bottom,p.y);}bounds={x,y,width:right-x,height:bottom-y};}const rect=$('boardWrap').getBoundingClientRect(),next=fitCamera(bounds,rect);animateView(next);}
-function recompute(elapsed=0){solution=elapsed?simulation.advance(state.components,state.wires,state.junctions,elapsed*(state.simulationRate??1)):simulation.read(state.components,state.wires,state.junctions);const blown=state.components.filter(c=>c.type==='fuse'&&!c.blown&&Math.abs(solution.components[c.id]?.current??0)>c.value+1e-9);if(blown.length){blown.forEach(c=>c.blown=true);solution=simulation.read(state.components,state.wires,state.junctions);toast(`${blown.map(label).join('、')} 已熔断，请检查电路后更换。`);}}
+function recompute(elapsed=0){solution=elapsed?simulation.advance(state.components,state.wires,state.junctions,elapsed*(state.simulationRate??1)):simulation.read(state.components,state.wires,state.junctions);const blown=state.components.filter(c=>c.type==='fuse'&&!c.blown&&Math.abs(solution.components[c.id]?.current??0)>c.value+1e-9);if(blown.length){blown.forEach(c=>c.blown=true);solution=simulation.read(state.components,state.wires,state.junctions);toast(`${blown.map(label).join('、')} 已熔断，请检查电路后更换。`);}solution=displayReadings(solution);}
 function fan(c,reading){const level=Math.min(1,Math.abs(reading?.backEmf??0)/6),active=level>1e-9&&store.data.settings.motion,duration=2.3-1.7*level,now=performance.now();let rotor=rotors.get(c.id);if(!rotor){rotor=new RotorMotion(now);rotors.set(c.id,rotor);}rotor.setSpeed(active?((reading?.backEmf??0)<0?-1:1)*360/duration:0,now);const blade='<path d="M0-2C-5-14 0-24 9-21C17-17 11-5 2-1Z"/>';return `<g class="fan-position" transform="translate(${c.x} ${c.y})"><g class="motor-fan ${active?'active':''}" data-motor-id="${c.id}" transform="rotate(${rotor.angle})" style="opacity:${.16+.43*level}">${blade}${blade.replace('<path ','<path transform="rotate(120)" ')}${blade.replace('<path ','<path transform="rotate(240)" ')}<circle r="3"/></g></g>`;}
 function animateFans(time){fanFrame=null;let moving=false;for(const el of $('board').querySelectorAll('.motor-fan.active')){const rotor=rotors.get(el.dataset.motorId);if(rotor){el.setAttribute('transform',`rotate(${rotor.advance(time)})`);moving=true;}}if(moving&&!document.hidden)fanFrame=requestAnimationFrame(animateFans);}
 function startFanFrames(){if(activeId&&fanFrame===null&&!document.hidden&&$('board').querySelector('.motor-fan.active'))fanFrame=requestAnimationFrame(animateFans);}
@@ -345,11 +347,11 @@ function headerMenuButtons(){return [...$('headerActionsMenu').querySelectorAll(
 function openHeaderMenu({last=false}={}){
   if(!document.querySelector('.site-header').classList.contains('header-overflow'))return;
   closeMenu();const menu=$('headerActionsMenu'),top=$('headerMoreButton').getBoundingClientRect().bottom+8;
-  menu.style.top=top+'px';menu.style.maxHeight=Math.max(48,innerHeight-top-8)+'px';menu.hidden=false;
+  const s=uiScale();menu.style.top=top/s+'px';menu.style.maxHeight=Math.max(48,(innerHeight-top-8)/s)+'px';menu.hidden=false;
   $('headerMoreButton').setAttribute('aria-expanded','true');const buttons=headerMenuButtons();(last?buttons.at(-1):buttons[0])?.focus({preventScroll:true});
 }
 function updateDock(){
-  if(!activeId||gesture||pinch)return;const workspace=$('workspace'),rect=workspace.getBoundingClientRect(),toolWidth=parseFloat(getComputedStyle(workspace).getPropertyValue('--tool-width'))||166;
+  if(!activeId||gesture||pinch)return;const workspace=$('workspace'),rect=workspace.getBoundingClientRect(),toolWidth=(parseFloat(getComputedStyle(workspace).getPropertyValue('--tool-width'))||166)*uiScale();
   const above=rect.width-toolWidth<rect.height;workspace.classList.toggle('tools-above',above);$('toolbarToggle').innerHTML=icon(above?'panel-top':'panel-left');
 }
 function applyTheme(){
@@ -358,10 +360,18 @@ function applyTheme(){
   $('themeSetting').value=preference;document.querySelector('meta[name="theme-color"]').content=dark?'#171b26':'#7357ec';
   try{const bars=androidSystemBars();if(bars?.setStyle)bars.setStyle({style:dark?'DARK':'LIGHT'}).catch(()=>{});}catch{}
 }
+function applyUiScale(){
+  const value=normalizeUiScale(store.data.settings.uiScale);document.documentElement.style.setProperty('--ui-scale',value);if(![...$('uiScaleSetting').options].some(option=>option.value===String(value)))$('uiScaleSetting').add(new Option(`${Math.round(value*100)}%`,String(value)));$('uiScaleSetting').value=String(value);
+  libraryDrag.cancel();stopCameraAnimation();
+  updateScaleLayout();
+  requestAnimationFrame(()=>{updateDock();fitHeader();updateViewport();updatePropertiesTitle();});
+}
+function updateScaleLayout(){document.documentElement.classList.toggle('ui-compact-settings',innerWidth/uiScale()<360);}
+window.addEventListener('resize',updateScaleLayout);
 systemTheme.addEventListener('change',()=>applyTheme());
 const nativeAppearance=globalThis.Capacitor?.getPlatform?.()==='android'?globalThis.Capacitor.Plugins?.CircuitAppearance:null;
 if(nativeAppearance){nativeAppearance.addListener('themeChanged',appearance=>{nativeSystemDark=!!appearance.dark;applyTheme();});nativeAppearance.getSystemTheme().then(appearance=>{nativeSystemDark=!!appearance.dark;applyTheme();}).catch(()=>{});}
-new ResizeObserver(entries=>document.documentElement.style.setProperty('--header-height',entries[0].target.getBoundingClientRect().height+'px')).observe($('headerPanel'));
+new ResizeObserver(entries=>document.documentElement.style.setProperty('--header-height',entries[0].target.getBoundingClientRect().height/uiScale()+'px')).observe($('headerPanel'));
 new ResizeObserver(updateDock).observe($('workspace'));
 new ResizeObserver(fitHeader).observe(document.querySelector('.site-header'));
 document.fonts?.ready.then(fitHeader);
@@ -372,7 +382,7 @@ const guideText={help:{title:'你的电路实验工具箱',intro:'从一个元�
 function showGuide(name='help'){activeGuide=name;const g=guideText[name];document.querySelectorAll('[data-guide]').forEach(el=>el.classList.toggle('active',el.dataset.guide===name));$('guideContent').innerHTML=`<div class="guide-content"><h3>${g.title}</h3><p>${g.intro}</p><ol>${g.steps.map(s=>`<li>${s}</li>`).join('')}</ol>${g.formula?`<div class="guide-formula">${g.formula}</div>`:'<div class="guide-shortcuts"><span><kbd>V / J / W / E</kbd>选择、接线、删除</span><span><kbd>Ctrl+Z</kbd>撤销</span><span><kbd>Ctrl+Shift+Z</kbd>重做</span><span><kbd>双指 / 滚轮</kbd>缩放画布</span><span><kbd>F / Esc</kbd>全屏、退出全屏</span><span><kbd>0</kbd>适应画布</span></div>'}<div class="guide-model">电动机包含线圈电阻与反电动势，电功率分为发热和机械功率；可观察启动与堵转。电容模拟充放电、储能，可慢放观察。LED 正向导通、反向截止，需串联限流电阻。电铃敲击频率和响度随供电变化；理想线圈采用稳态模型。普通导线交叉不会接通，实心节点处的支路互相接通。</div></div>`;$('startGuideExperiment').innerHTML=(name==='help'?'回到实验室':'载入示例')+icon('arrow-right');openDialog('guideDialog');animateSurface($('guideContent'));}
 
 function closeMenu(){$('experimentMenu').hidden=true;menuId=null;}
-$('experimentList').addEventListener('click',event=>{const open=event.target.closest('[data-open-experiment]'),more=event.target.closest('[data-doc-menu]');if(open)openExperiment(open.dataset.openExperiment);if(more){menuId=more.dataset.docMenu;const r=more.getBoundingClientRect();$('experimentMenu').style.left=`${Math.min(window.innerWidth-180,r.left)}px`;$('experimentMenu').style.top=`${Math.min(window.innerHeight-130,r.bottom+5)}px`;$('experimentMenu').hidden=false;}});
+$('experimentList').addEventListener('click',event=>{const open=event.target.closest('[data-open-experiment]'),more=event.target.closest('[data-doc-menu]');if(open)openExperiment(open.dataset.openExperiment);if(more){menuId=more.dataset.docMenu;const r=more.getBoundingClientRect(),s=uiScale();$('experimentMenu').style.left=`${Math.max(8,Math.min(window.innerWidth-180*s,r.left)/s)}px`;$('experimentMenu').style.top=`${Math.max(8,Math.min(window.innerHeight-130*s,r.bottom+5*s)/s)}px`;$('experimentMenu').hidden=false;}});
 $('experimentMenu').onclick=event=>{const button=event.target.closest('[data-doc-action]');if(!button)return;const id=menuId;closeMenu();if(button.dataset.docAction==='rename')renameExperiment(id);if(button.dataset.docAction==='archive')archiveExperiment(id);if(button.dataset.docAction==='delete')deleteExperiment(id);};
 document.addEventListener('click',event=>{if(!event.target.closest('#experimentMenu,[data-doc-menu]'))closeMenu();if(!event.target.closest('#headerActionsMenu,#headerMoreButton'))closeHeaderMenu();});
 $('headerMoreButton').onclick=()=>{$('headerActionsMenu').hidden?openHeaderMenu():closeHeaderMenu({restoreFocus:true});};
@@ -395,12 +405,13 @@ document.querySelectorAll('button[data-view-mode]').forEach(el=>el.onclick=()=>s
 document.querySelectorAll('button[data-tool]').forEach(el=>el.onclick=()=>setTool(el.dataset.tool));$('undoButton').onclick=undoAction;$('redoButton').onclick=redoAction;
 $('zoomIn').onclick=()=>setZoom((cameraAnimation?.next.zoom??zoom)*1.15);$('zoomOut').onclick=()=>setZoom((cameraAnimation?.next.zoom??zoom)/1.15);$('fitButton').onclick=fitAll;$('fullscreenButton').onclick=toggleFullscreen;
 $('currentToggle').checked=state.showCurrent;$('currentToggle').onchange=()=>{state.showCurrent=$('currentToggle').checked;renderBoard();saveSoon();};
-const libraryDrag=bindLibraryDrag({library:$('componentLibrary'),board:$('board'),previewContent:type=>`<span class="component-thumb">${partThumbnail(type,'drag')}</span><strong>${definitions[type].name}</strong>`,toWorld:pointFromEvent,add:addComponent,enabled:()=>!!activeId&&!converting&&!document.querySelector('dialog[open]')});
+const libraryDrag=bindLibraryDrag({library:$('componentLibrary'),board:$('board'),scroller:$('componentPanel'),previewContent:type=>`<span class="component-thumb">${partThumbnail(type,'drag')}</span><strong>${definitions[type].name}</strong>`,toWorld:pointFromEvent,add:addComponent,enabled:()=>!!activeId&&!converting&&!document.querySelector('dialog[open]')});
 $('clearButton').onclick=()=>confirmAction('清空当前实验画布？','元件、节点与导线将被移除。可以通过撤销恢复。',()=>{pushHistory();state={...createPreset('free',state.records),viewMode:state.viewMode};selected=null;cancelWire();update();},'清空画布');
 $('headerToggle').onclick=()=>setHeaderExpanded(document.body.classList.contains('header-collapsed'));$('toolbarToggle').onclick=()=>setToolbarExpanded(document.body.classList.contains('toolbar-collapsed'));
 $('sidebarToggle').onclick=()=>setSidebarExpanded(!document.body.classList.contains('sidebar-open'));$('sidebarScrim').onclick=()=>setSidebarExpanded(false);
 $('settingsButton').onclick=()=>{setSettingsTab('preferences');applyTheme();$('soundSetting').checked=store.data.settings.sound;$('motionSetting').checked=store.data.settings.motion;$('volumeSetting').value=Math.round(store.data.settings.volume*100);$('volumeValue').textContent=$('volumeSetting').value+'%';$('recoverDraftButton').hidden=!(store.data.draft??legacy);openDialog('settingsDialog');};
 $('themeSetting').onchange=()=>{const theme=$('themeSetting').value;try{store.settings({theme});}catch{store.data.settings.theme=theme;toast('外观设置暂未保存');}applyTheme();};
+$('uiScaleSetting').onchange=()=>{const value=normalizeUiScale(Number($('uiScaleSetting').value));try{store.settings({uiScale:value});}catch{store.data.settings.uiScale=value;toast('界面缩放暂未保存');}applyUiScale();};
 document.querySelectorAll('[data-settings-tab]').forEach(el=>el.onclick=()=>setSettingsTab(el.dataset.settingsTab));
 for(const id of ['soundSetting','motionSetting','volumeSetting'])$(id).oninput=()=>{const next={sound:$('soundSetting').checked,motion:$('motionSetting').checked,volume:Number($('volumeSetting').value)/100};try{store.settings(next);}catch{Object.assign(store.data.settings,next);toast('设置暂未保存');}$('volumeValue').textContent=$('volumeSetting').value+'%';renderAudioState();renderBoard();audio.sync(activeId?state.components:[],solution.components,store.data.settings);};
 $('archivedList').onclick=event=>{const restore=event.target.closest('[data-restore-experiment]'),del=event.target.closest('[data-delete-experiment]');if(restore){if(tryStore(()=>store.restore(restore.dataset.restoreExperiment)))toast('实验已恢复到列表');}if(del)deleteExperiment(del.dataset.deleteExperiment);};
@@ -419,7 +430,7 @@ window.addEventListener('storage',event=>{
     if(removed){next.draft=draft;next.draftName=name;activeId=null;stopCameraAnimation();resetGestures();}
     next.activeId=activeId;store.data=next;
     if(removed){try{store.recover(draft,name);toast('当前实验已在其他页面归档或删除，编辑内容可在设置中恢复。');}catch{toast('当前实验已在其他页面移除，请在设置中导出备份以保留编辑内容。');}}
-    applyTheme();renderSidebar();renderTitle();renderArchives();
+    applyTheme();applyUiScale();renderSidebar();renderTitle();renderArchives();
   }catch{}
 });
 let simulationTime=performance.now(),simulationSaved=simulationTime;
@@ -431,6 +442,6 @@ setInterval(()=>{
   audio.sync(state.components,solution.components,store.data.settings);
   if(now-simulationSaved>2000){simulationSaved=now;saveSoon();}
 },50);
-renderLibrary();renderSidebar();renderTitle();setTool('select');update();renderArchives();renderAudioState();restoreSidebar();restoreChrome();renderFullscreen();applyTheme();fitHeader();
+renderLibrary();renderSidebar();renderTitle();setTool('select');update();renderArchives();renderAudioState();restoreSidebar();restoreChrome();renderFullscreen();applyTheme();applyUiScale();fitHeader();
 
 $('recoverDraftButton').onclick=()=>{const draft=store.data.draft??legacy;if(!draft)return;askName('恢复为新实验',store.data.draftName==='未保存的实验'?'恢复的实验':store.data.draftName,name=>{if(!tryStore(()=>{activeId=store.save(draft,name);draftName=name;}))return;restoreState(draft);$('settingsDialog').close();closeSidebarOnNarrowScreens();toast('草稿已恢复为实验，后续修改自动保存');},'创建');};

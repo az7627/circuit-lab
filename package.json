@@ -1,6 +1,6 @@
 {
   "name": "middle-school-circuit-lab",
-  "version": "2.10.0-beta.3",
+  "version": "2.10.0-beta.4",
   "private": true,
   "type": "module",
   "description": "面向中学生的离线电路虚拟实验室",
@@ -40,6 +40,7 @@
     "test:ui": "node scripts/test-ui.mjs",
     "test:drag": "node scripts/test-library-drag.mjs",
     "test:flow": "node scripts/test-current-flow.mjs",
+    "test:preferences": "node scripts/test-ui-preferences.mjs",
     "release:check": "node scripts/release-info.mjs",
     "release:verify": "node scripts/verify-artifacts.mjs",
     "release:publish": "node scripts/publish-release.mjs",

@@ -9,6 +9,13 @@ import {panCamera,viewportGeometry,heaterAppearance,feedbackLevel} from '../dist
 import {bellLevel} from '../dist/audio.js';
 class MemoryStorage{constructor(){this.values=new Map();this.fail=false;}getItem(k){return this.values.get(k)??null;}setItem(k,v){if(this.fail)throw new Error('QuotaExceeded');this.values.set(k,v);}}
 
+test('UI scale defaults, clamps invalid imports and persists across restart and backup normalization',()=>{
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage);assert.equal(store.data.settings.uiScale,1);
+  for(const scale of [.75,1,1.25,1.5,2]){store.settings({uiScale:scale});assert.equal(new ExperimentStore(storage).data.settings.uiScale,scale);}
+  const old=JSON.parse(storage.getItem(EXPERIMENTS_KEY));delete old.settings.uiScale;assert.equal(normalizeCollection(old).settings.uiScale,1);
+  for(const [value,expected]of [[null,1],['1.5',1],[-1,.75],[99,2]]){old.settings.uiScale=value;assert.equal(normalizeCollection(old).settings.uiScale,expected);}
+});
+
 test('appearance defaults to the system and explicit choices survive reload and backup normalization',()=>{
   const storage=new MemoryStorage(),store=new ExperimentStore(storage);
   assert.equal(store.data.settings.theme,'system');
