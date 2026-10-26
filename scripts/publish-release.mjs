@@ -47,7 +47,7 @@ async function main() {
   if (!existing) {
     const createArgs = [
       'api', `repos/${repository}/releases`, '--method', 'POST',
-      '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=Circuit Lab ${tag}`,
+      '-f', `tag_name=${tag}`, '-f', `target_commitish=${sha}`, '-f', `name=电路实验室 ${tag}`,
       '-F', 'draft=true', '-F', `prerelease=${prerelease}`
     ];
     try {

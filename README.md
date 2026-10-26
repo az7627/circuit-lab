@@ -2,41 +2,15 @@
 
 面向中学生的中文直流电路虚拟实验室。原生 HTML、CSS、JavaScript 和 SVG；网页版无需安装依赖。Windows、macOS、Linux 和 Android 均使用系统 WebView，网页资源均随应用打包，可离线使用。
 
-在仓库目录运行 `npm run dev`，打开 http://127.0.0.1:4173/ 。`npm test` 检查电路求解、导线、保存及反馈，`npm run check` 检查全部 JavaScript 模块语法。安装 Chrome 后可运行 `npm run test:ui`，检查自动保存、单行顶栏、悬浮属性、栏位收起、深浅色偏好、鼠标缩放与真实双指事件；也可设置 `CIRCUIT_LAB_BROWSER=msedge` 使用 Edge。截图保存在 `artifacts/ui/`。
+在仓库目录运行 `npm run dev`，打开 http://127.0.0.1:4173/ 。`npm test` 检查电路求解、导线、保存及反馈，`npm run test:drag` 验证鼠标及无需长按的触屏拖动、落点、取消、撤销和点击添加，`npm run check` 检查全部 JavaScript 模块语法。安装 Chrome 后可运行 `npm run test:ui`，检查自动保存、单行顶栏、悬浮属性、栏位收起、深浅色偏好、鼠标缩放与真实双指事件；也可设置 `CIRCUIT_LAB_BROWSER=msedge` 使用 Edge。截图保存在 `artifacts/ui/`。
 
 ## 桌面版与 Android 版
 
 以下命令在本 Git 仓库（`circuit-lab/`）执行。打包需要 Node.js 22.21.1 或以上，首次运行 `npm ci` 安装锁定版本的依赖。两端直接打包 `dist/` 的现有网页，无需运行本地服务器。`dist/` 是版本管理中的网页源码，请勿删除或加入忽略规则。
 
-### Electron 桌面版
+### 桌面版
 
-这是内置 Chromium 的完整桌面版，运行时一致，安装包较大。
-
-```powershell
-npm ci
-npm run desktop                # 开发启动
-npm run test:desktop           # 验证开发版 Electron 的启动、重启恢复和导入导出
-npm run test:desktop -- --packaged # 启动当前系统实际打包后的程序进行检查
-npm run desktop:build:win      # Windows x64 安装程序与免安装程序
-npm run desktop:build:mac -- --arm64 # 在 Apple Silicon macOS 上生成 DMG 和 ZIP
-npm run desktop:build:mac -- --x64   # 在 Intel macOS 上生成 DMG 和 ZIP
-npm run desktop:build:linux    # 在 Linux 上生成 x64 AppImage 和 DEB
-```
-
-输出目录为 `release/desktop/`：
-
-- `CircuitLab-<版本>-windows-x64-setup.exe`：可选择安装位置的安装程序。
-- `CircuitLab-<版本>-windows-x64-portable.exe`：免安装启动。
-- `CircuitLab-<版本>-macos-<arm64或x64>.dmg` / `.zip`：对应架构的 macOS 应用。
-- `CircuitLab-<版本>-linux-x64.AppImage` / `.deb`：Linux 免安装程序及 Debian/Ubuntu 安装包。
-
-需要在对应系统上构建，GitHub Actions 会分别提供 Windows、macOS ARM64、macOS Intel 和 Ubuntu 环境，不需要本地 Mac 或 WSL。`npm run desktop:build` 使用当前系统默认目标，`npm run desktop:pack` 仅生成应用目录。图标由 Node 从 SVG 生成到已忽略的 `build/`，不依赖桌面环境。当前 Windows 未做商业代码签名；macOS 使用 ad-hoc 签名及适配权限，未经过 Apple 公证，首次打开可能受到系统安全提示限制。云端启动检查不代表通过 Gatekeeper 公证。后续配置 Windows 证书时先启用 `win.signExecutable`，Apple 证书则替换 `mac.identity` 并配置公证；见 [electron-builder 签名说明](https://www.electron.build/v26/docs/features/code-signing/)。
-
-实验保存在 Electron 的用户数据目录中，与网页版的浏览器数据独立；升级程序不清空实验。网页版已有实验可先在设置中导出 JSON 备份，再在桌面版或 Android 版导入。导入使用系统文件选择器，导出使用系统保存对话框。桌面窗口禁止网页访问 Node.js，使用隔离与沙盒，通过固定本地协议加载内置文件。
-
-### 桌面系统 WebView 轻量版
-
-轻量版使用 Tauri，不随应用打包浏览器内核。Windows 使用已安装的 Microsoft Edge WebView2 Runtime，macOS 使用系统 WKWebView，Linux 使用 WebKitGTK 4.1。Windows 安装程序不下载或安装 WebView2，缺少运行时的机器须先安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。Linux DEB 声明系统 WebKitGTK/GTK 依赖，免安装压缩包同样使用系统运行时，面向 Ubuntu 24.04 或兼容环境。系统运行时及开发依赖见 [Tauri 官方说明](https://v2.tauri.app/start/prerequisites/)。
+桌面版使用 Tauri，不随应用打包浏览器内核。Windows 使用已安装的 Microsoft Edge WebView2 Runtime，macOS 使用系统 WKWebView，Linux 使用 WebKitGTK 4.1。Windows 安装程序不下载或安装 WebView2，缺少运行时的机器须先安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。Linux DEB 声明系统 WebKitGTK/GTK 依赖，免安装压缩包同样使用系统运行时，面向 Ubuntu 24.04 或兼容环境。系统运行时及开发依赖见 [Tauri 官方说明](https://v2.tauri.app/start/prerequisites/)。
 
 安装 Rust 1.97.1 和对应系统开发工具后执行：
 
@@ -45,6 +19,8 @@ npm run system:dev            # 开发启动
 npm run system:build          # 当前平台的系统 WebView 安装包
 npm run test:system           # 验证实际原生程序的保存、主题、导出和全屏
 ```
+
+软件和窗口统一称为“电路实验室”。Windows 使用中文安装向导，默认安装到当前用户的 `CircuitLab` 目录，也可自选目录。后续升级沿用原安装位置和固定应用标识，不清空实验。旧中文目录版本需先自行卸载。
 
 输出目录 `release/system-webview/`，Windows 提供安装程序和免安装 EXE，macOS 提供 DMG/ZIP，Linux 提供 TAR.GZ/DEB。Linux 不使用会携带 WebKitGTK 的 Tauri AppImage。发布版均使用系统 WebView，与旧版 Electron 版本使用独立数据目录，切换时可用 JSON 导出、导入实验。
 

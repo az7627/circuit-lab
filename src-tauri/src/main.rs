@@ -37,7 +37,7 @@ fn main() {
         .setup(|app| {
             let smoke=std::env::var_os("CIRCUIT_LAB_SYSTEM_SMOKE_REPORT").is_some();
             let mut builder=WebviewWindowBuilder::new(app,"main",WebviewUrl::App("index.html".into()))
-                .title("电路实验室 · 系统 WebView 版").inner_size(1440.0,940.0).min_inner_size(360.0,600.0)
+                .title("电路实验室").inner_size(1440.0,940.0).min_inner_size(360.0,600.0).disable_drag_drop_handler()
                 .visible(false).incognito(smoke)
                 .on_navigation(|url| matches!(url.scheme(),"tauri"|"about") || url.host_str().is_some_and(|host|host=="tauri.localhost"||host=="localhost"))
                 .on_page_load(move |window,payload| {
@@ -48,5 +48,5 @@ fn main() {
             let window=builder.build()?;
             if !smoke { window.show()?; }
             Ok(())
-        }).run(tauri::generate_context!()).expect("系统 WebView 版启动失败");
+        }).run(tauri::generate_context!()).expect("电路实验室启动失败");
 }

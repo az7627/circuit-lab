@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "电路实验室轻量版",
+  "productName": "电路实验室",
   "version": "../package.json",
   "identifier": "io.circuitlab.desktop.systemwebview",
   "build": { "frontendDist": "../dist" },
@@ -17,8 +17,20 @@
     "targets": "all",
     "icon": ["../build/tauri-icons/icon.icns", "../build/icon.png", "../build/icon.ico"],
     "category": "Education",
-    "shortDescription": "使用系统 WebView 的离线电路实验室",
-    "windows": { "webviewInstallMode": { "type": "skip" } },
+    "shortDescription": "离线电路实验室",
+    "windows": {
+      "webviewInstallMode": { "type": "skip" },
+      "nsis": {
+        "template": "windows/installer.nsi",
+        "installMode": "currentUser",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false,
+        "installerIcon": "../build/icon.ico",
+        "uninstallerIcon": "../build/icon.ico",
+        "headerImage": "../build/installer-header.bmp",
+        "sidebarImage": "../build/installer-sidebar.bmp"
+      }
+    },
     "macOS": { "signingIdentity": "-", "minimumSystemVersion": "12.0" },
     "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"] } }
   }

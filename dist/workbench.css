@@ -28,7 +28,7 @@ body{display:flex;flex-direction:column;height:100dvh;min-height:0;background:#f
 .header-actions{display:flex;align-items:center;gap:10px;flex:none;margin-left:auto;white-space:nowrap}
 .header-secondary{display:contents}
 #headerMoreButton{display:none;width:30px;height:32px;flex:none}
-.header-actions .text-button{font-size:11px;padding:7px 4px;min-height:32px;border-radius:5px;flex:none}
+.header-actions .text-button{display:inline-flex;align-items:center;justify-content:center;font-size:11px;padding:7px 4px;min-height:32px;border-radius:5px;flex:none}
 .header-file-actions{display:flex;align-items:center;gap:8px;flex:none}
 .header-zoom{display:flex;align-items:center;gap:1px;padding:0 8px;border-left:1px solid var(--line);border-right:1px solid var(--line);flex:none}
 .header-zoom .tool-button{width:26px;height:30px}
@@ -106,7 +106,12 @@ main{grid-column:2;padding:0;margin:0;max-width:none;width:100%;height:100%;min-
 .history-tools button:hover:enabled{background:#f5f3fb;color:var(--purple)}
 .history-tools .icon{width:15px;height:15px}
 .component-library{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:7px;flex:none;min-height:0;max-height:none;overflow:visible;padding:1px 1px 5px}
-.component-card{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:center;height:58px;gap:4px;padding:5px 2px;text-align:center}
+.component-card{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:center;height:58px;gap:4px;padding:5px 2px;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.component-card.is-dragging{opacity:.45;cursor:grabbing}
+.library-drag-preview{position:fixed;top:0;left:0;z-index:1000;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:76px;height:68px;border:1px solid var(--line);border-radius:10px;background:var(--raised-bg,#fff);color:var(--text-main,var(--ink));box-shadow:0 6px 22px #0003;opacity:.85}
+.library-drag-preview strong{font-size:11px;font-weight:500}
+.library-drag-preview.can-drop{border-color:var(--purple);opacity:1}
+.library-drop-target{outline:2px solid var(--purple);outline-offset:-2px}
 .component-card strong{font-size:10px;font-weight:500;margin:0;white-space:nowrap}
 .component-thumb{width:34px;height:27px;background:none}
 .component-thumb svg{width:32px;height:26px}

@@ -1,6 +1,6 @@
 [package]
 name = "circuit-lab-systemwebview"
-version = "2.9.1"
+version = "2.10.0-beta.2"
 edition = "2021"
 publish = false
 

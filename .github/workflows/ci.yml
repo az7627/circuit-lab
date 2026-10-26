@@ -38,6 +38,9 @@ jobs:
       - run: npm run check:git
       - run: npm run check
       - run: npm test
+      - name: Check mouse and immediate touch dragging
+        if: runner.os == 'Windows'
+        run: npm run test:drag
       - name: Install Electron test runtime
         run: node node_modules/electron/install.js
       - name: Prepare Linux display and sandbox
