@@ -16,6 +16,7 @@ import {zoomView,startPinch,movePinch} from './camera.js';
 import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js';
 import {bindLibraryDrag} from './library-drag.js';
+import {renderWireLayer} from './wire-renderer.js';
 
 if(location.protocol==='circuit:'||globalThis.Capacitor?.getPlatform?.()==='android'){
   document.querySelector('.settings-backup p').textContent='实验保存在当前设备。导出备份可保留全部实验与归档内容。';
@@ -113,7 +114,12 @@ function renderBoard(){
   const dots=physical?'':schematicJunctionDots(state,terminalPoint).map(p=>`<circle class="connection-dot" cx="${p.x}" cy="${p.y}" r="3.5"/>`).join('');
   const nodes=state.junctions.map(n=>`<g class="junction-group ${selected===n.id?'selected':''}" data-junction="${n.id}" data-terminal="${n.id}:0" role="button" tabindex="0" aria-label="接线节点 ${n.id.toUpperCase()}"><circle class="junction-hit" cx="${n.x}" cy="${n.y}" r="14"/><circle class="junction-ring" cx="${n.x}" cy="${n.y}" r="11"/><circle class="${physical?'junction-dot':'junction-anchor'} ${pendingTerminal===`${n.id}:0`?'pending':''}" cx="${n.x}" cy="${n.y}" r="5"/></g>`).join('');
   const empty=!state.components.length&&!state.junctions.length?`<g class="empty-board"><text class="canvas-empty" x="${camera.x}" y="${camera.y-15}">一个想法，一次新的实验。</text><text class="canvas-empty" x="${camera.x}" y="${camera.y+15}" style="font-size:11px">添加元件开始搭建 · 拖动空白处自由探索</text></g>`:'';
-  $('board').innerHTML=defs+`<g data-layer="components">${components}</g><g data-layer="wires">${wires}</g><g data-layer="terminals">${terminals}${nodes}${dots}</g><path id="wirePreview" class="wire-preview"/>`+empty;
+  const board=$('board');
+  if(!board.querySelector('[data-layer="wires"]'))board.innerHTML=defs+'<g data-layer="components"/><g data-layer="wires"/><g data-layer="terminals"/><path id="wirePreview" class="wire-preview"/><g data-layer="empty"/>';
+  board.querySelector('[data-layer="components"]').innerHTML=components;
+  renderWireLayer(board.querySelector('[data-layer="wires"]'),wires);
+  board.querySelector('[data-layer="terminals"]').innerHTML=terminals+nodes+dots;
+  board.querySelector('[data-layer="empty"]').innerHTML=empty;
   $('board').dataset.tool=tool;$('board').dataset.viewMode=state.viewMode;$('board').dataset.activeBells=state.components.filter(c=>c.type==='bell'&&Math.abs(solution.components[c.id]?.power??0)>1e-9).length;
   for(const id of rotors.keys())if(getComponent(id)?.type!=='motor')rotors.delete(id);startFanFrames();
   updateViewport();renderPreview();if(selector)$('board').querySelector(selector)?.focus({preventScroll:true});

@@ -19,7 +19,12 @@
     const data=JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'));
     const {serializeExperiment}=await import('./files.js');
     check(await invoke('save_experiment',{content:serializeExperiment(data.experiments[0].state,'系统 WebView 验证'),name:'实验.json'}),'原生导出失败');
+    document.querySelector('[data-add="resistor"]').click();document.querySelector('[data-tool="junction"]').click();
+    for(const terminal of ['e1:0','r1:0','r1:1','e1:1'])document.querySelector(`[data-terminal="${terminal}"]`).dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    document.querySelector('[data-tool="select"]').click();document.querySelector('[data-component="e1"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    const flow=document.querySelector('.wire-flow');check(flow,'电流动画未显示');
+    for(let i=0;i<20;i++){const input=document.getElementById('propertyRange');input.value=String(2+i*.4);input.dispatchEvent(new Event('input',{bubbles:true}));check(flow.isConnected&&document.querySelector('.wire-flow')===flow,'调节电压重建了电流动画');}
     await invoke('set_fullscreen',{fullscreen:true});await invoke('set_fullscreen',{fullscreen:false});
-    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:1,theme:'dark',persistence:true,export:true,fullscreen:true}});
+    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',persistence:true,export:true,fullscreen:true,currentFlow:true}});
   }catch(error){await invoke('system_smoke_report',{report:{error:error.stack||String(error)}});}
 })();
