@@ -55,7 +55,7 @@ fn window_controls(_: &WebviewWindow) -> Controls {
 
 #[cfg(target_os = "linux")]
 fn window_controls(window: &WebviewWindow) -> Controls {
-    use gtk::prelude::{SettingsExt, WidgetExt};
+    use gtk::prelude::{GtkSettingsExt, WidgetExt};
     use std::process::Command;
 
     fn read(command: &str, args: &[&str]) -> Option<String> {
