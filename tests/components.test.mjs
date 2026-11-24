@@ -5,6 +5,7 @@ import {CircuitSimulation} from '../dist/simulation.js';
 import {component,createPreset} from '../dist/models.js';
 import {normalizeState} from '../dist/data.js';
 import {bellResponse,BellAudio} from '../dist/audio.js';
+import {ledLevel} from '../dist/led.js';
 
 const near=(a,b,tolerance=1e-8)=>assert.ok(Math.abs(a-b)<tolerance,`${a} != ${b}`);
 const wires=ends=>ends.map(([a,b],i)=>({id:`w${i+1}`,a,b}));
@@ -16,6 +17,28 @@ test('a real battery drops terminal voltage, dissipates internal heat and limits
   const short=solveCircuit([parts[0]],[{id:'w1',a:'e1:0',b:'e1:1'}]);assert.equal(short.status,'short');near(short.current,3);near(short.components.e1.current,-3);near(short.components.e1.internalPower,18);
   const parallel=solveCircuit([parts[0],{id:'e2',type:'battery',value:9,internalResistance:2}],wires([['e1:0','e2:0'],['e1:1','e2:1']]));assert.notEqual(parallel.status,'invalid');near(parallel.components.e1.current,.75);near(parallel.components.e2.current,-.75);
   assert.equal(solveCircuit([{...parts[0],internalResistance:-1}],[]).status,'invalid');
+});
+
+test('a default LED visibly dims as a 0–20 Ω rheostat adds resistance on 3, 4.5 and 6 V series packs',()=>{
+  for(const cells of [2,3,4]){
+    const sources=Array.from({length:cells},(_,index)=>component(`e${index+1}`,'battery',0,0,1.5));
+    const led=component('g1','led',0,0),rheostat=component('t1','rheostat',0,0);
+    const circuit=wires([['e1:0','t1:0'],['t1:1','g1:0'],['g1:1',`e${cells}:1`],
+      ...sources.slice(1).map((source,index)=>[`e${index+1}:1`,`${source.id}:0`])]);
+    let prior=Infinity;
+    let brightest;
+    for(const slider of [0,.25,.5,.75,1]){
+      const result=solveCircuit([...sources,led,{...rheostat,slider}],circuit);
+      const current=result.components.g1.current;
+      near(current,(1.5*cells-led.value)/(10+20*slider));
+      assert.ok(ledLevel(current)<prior);
+      prior=ledLevel(current);
+      brightest??=prior;
+    }
+    assert.ok(brightest-prior>.2);
+  }
+  assert.equal(ledLevel(0),0);
+  assert.equal(ledLevel(-.02),0);
 });
 
 test('motor running current differs from U/r, conserves power and rises on stall',()=>{

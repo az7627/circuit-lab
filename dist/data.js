@@ -1,4 +1,4 @@
-import {definitions} from './models.js?v=2.6';
+import {definitions,validComponentValue,validInternalResistance} from './models.js?v=2.10.0-beta.5';
 import {upgradeStoredState} from './visuals.js?v=2.6';
 import {terminalIndices} from './terminals.js?v=2.6';
 export const clone=value=>JSON.parse(JSON.stringify(value));
@@ -28,10 +28,10 @@ export function normalizeState(input){
   const ids=new Set(),terminals=new Set(),wireIds=new Set();
   for(const c of d.components){
     const type=c&&Object.hasOwn(definitions,c.type)&&definitions[c.type];
-    if(!type||!/^[a-z]\d+$/.test(c.id)||!Number.isSafeInteger(Number(c.id.slice(1)))||ids.has(c.id)||!Number.isFinite(c.x)||!Number.isFinite(c.y)||!Number.isFinite(c.value)||(type.unit&&(c.value<type.min||c.value>type.max))||![0,90,180,270].includes(c.angle)||typeof c.closed!=='boolean'||(c.type==='fuse'&&typeof c.blown!=='boolean'))return null;
+    if(!type||!/^[a-z]\d+$/.test(c.id)||!Number.isSafeInteger(Number(c.id.slice(1)))||ids.has(c.id)||!Number.isFinite(c.x)||!Number.isFinite(c.y)||!validComponentValue(c.type,c.value)||![0,90,180,270].includes(c.angle)||typeof c.closed!=='boolean'||(c.type==='fuse'&&typeof c.blown!=='boolean'))return null;
     if(c.type==='spdt'&&![1,2].includes(c.position))return null;
     if(c.physicalFlip!==undefined&&typeof c.physicalFlip!=='boolean')return null;
-    if(c.type==='battery'){c.internalResistance??=0;if(!Number.isFinite(c.internalResistance)||c.internalResistance<0||c.internalResistance>100)return null;}
+    if(c.type==='battery'){c.internalResistance??=0;if(!validInternalResistance(c.internalResistance))return null;}
     if(c.type==='rheostat'){c.slider??=1;if(!Number.isFinite(c.slider)||c.slider<0||c.slider>1)return null;}
     if(c.type==='capacitor'){c.chargeVoltage??=0;if(!Number.isFinite(c.chargeVoltage)||Math.abs(c.chargeVoltage)>1000000)return null;}
     if(c.type==='motor'){c.stalled??=false;if(typeof c.stalled!=='boolean')return null;}

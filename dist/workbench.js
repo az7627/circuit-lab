@@ -1,24 +1,24 @@
 import {convertView,routeCircuit,moveItem} from './layout.js?v=2.7';
 import {isMeter,meterConnection,meterScale,visibleTerminals,terminalLabel} from './meters.js?v=2.6';
-import {definitions,component,createPreset} from './models.js?v=2.6';
-import {symbol,thumbnail} from './symbols.js?v=2.9.1';
-import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.9.1';
-import {icons,icon} from './icons.js?v=2.9.0';
+import {definitions,component,createPreset,validComponentValue,validInternalResistance} from './models.js?v=2.10.0-beta.5';
+import {symbol,thumbnail} from './symbols.js?v=2.10.0-beta.5';
+import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.10.0-beta.5';
+import {icons,icon} from './icons.js?v=2.10.0-beta.5';
 import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera} from './visuals.js?v=2.6';
 import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute,nearestConnection} from './wiring.js?v=2.6';
-import {clone,normalizeState,pruneLayoutCaches} from './data.js?v=2.6';
-import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.10.0-beta.4';
+import {clone,normalizeState,pruneLayoutCaches} from './data.js?v=2.10.0-beta.5';
+import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.10.0-beta.5';
 import {BellAudio} from './audio.js?v=2.6';
 import {RotorMotion} from './motion.js?v=2.6';
-import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.6';
+import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.10.0-beta.5';
 import {saveFile,androidSystemBars,systemDesktop} from './platform.js?v=2.9.1';
 import {zoomView,startPinch,movePinch} from './camera.js';
 import {schematicJunctionDots} from './connections.js';
-import {CircuitSimulation} from './simulation.js';
+import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
 import {renderWireLayer} from './wire-renderer.js';
 import {displayReadings} from './readings.js';
-import {uiScale,normalizeUiScale} from './ui-scale.js';
+import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
 
 if(location.protocol==='circuit:'||globalThis.Capacitor?.getPlatform?.()==='android'){
   document.querySelector('.settings-backup p').textContent='实验保存在当前设备。导出备份可保留全部实验与归档内容。';
@@ -26,6 +26,7 @@ if(location.protocol==='circuit:'||globalThis.Capacitor?.getPlatform?.()==='andr
 
 Object.assign(icons,{redo:'<path d="M21 7H10a7 7 0 0 0 0 14h3m8-14-5-5m5 5-5 5"/>',settings:'<path d="m9 5-1 3-3 1 1 3-1 3 3 1 1 3h6l1-3 3-1-1-3 1-3-3-1-1-3H9Z"/><circle cx="12" cy="12" r="3"/>',pencil:'<path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-3 3 5 5"/>',save:'<path d="M4 3h13l4 4v14H3V3h1Zm3 0v6h9V3M7 21v-8h10v8"/>',archive:'<rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v13h14V8m-10 4h6"/>',restore:'<path d="M3 9a9 9 0 1 1 2 9M3 3v6h6M12 8v8m-3-3 3 3 3-3"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>'});
 const $=id=>document.getElementById(id),svgNS='http://www.w3.org/2000/svg';
+const valueParameters={battery:['电源电动势','E'],capacitor:['电容量','C'],inductor:['电感量','L'],fuse:['额定电流','I'],rheostat:['最大阻值','R'],motor:['线圈电阻','r'],led:['正向压降','U']};
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const fixed=(n,d=2)=>Number.isFinite(n)?(n!==0&&Math.abs(n)<.01?n.toPrecision(2):n.toFixed(d)):'—';
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
@@ -41,6 +42,8 @@ let saveTimer,toastTimer,confirmCallback,nameCallback,menuId=null,fullscreenFocu
 let lastSaveError=null,audioStatus='closed';
 let cameraAnimation=null,pinch=null,pendingTouch=null;
 let nativeFullscreen=false,fullscreenBusy=false;
+const desktop=systemDesktop();
+let desktopTitleBarHidden=false,desktopChromeBusy=false,desktopStatePending=false;
 let nativeSystemDark=globalThis.circuitLabNativeDark??null;
 const touchPoints=new Map(),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'),systemTheme=matchMedia('(prefers-color-scheme: dark)'),compactProperties=matchMedia('(max-width:1180px), (max-height:650px)');
 const rotors=new Map();let fanFrame=null;
@@ -75,7 +78,51 @@ function deleteExperiment(id){const e=store.data.experiments.find(e=>e.id===id);
 function resetGestures(){libraryDrag.cancel();gesture=null;pinch=null;pendingTouch=null;touchPoints.clear();$('boardWrap').classList.remove('is-panning');}
 function restoreState(value){simulation.reset();stopCameraAnimation();resetGestures();state=normalizeState(value)??normalizeState(createPreset('free'));prepareRoutes();camera={x:state.view.x,y:state.view.y};zoom=state.view.zoom;history=[];redo=[];selected=null;pendingTerminal=null;setTool('select');update();renderSidebar();renderTitle();animateSurface($('workspace'));saveSoon();}
 function renderArchives(){const items=store.data.experiments.filter(e=>e.archived);$('archiveCount').textContent=items.length;$('archivedList').innerHTML=items.length?items.map(e=>`<div class="archived-experiment"><div>${icon('archive')}<strong>${esc(e.name)}</strong></div><button class="button secondary" data-restore-experiment="${e.id}">${icon('restore')}恢复</button><button class="tool-button danger-action" data-delete-experiment="${e.id}" aria-label="删除归档实验 ${esc(e.name)}">${icon('trash')}</button></div>`).join(''):'<div class="archive-empty">还没有归档实验。归档后的实验会保留电路和数据，随时可以恢复。</div>';}
-function setSettingsTab(tab){document.querySelectorAll('[data-settings-tab]').forEach(el=>el.classList.toggle('active',el.dataset.settingsTab===tab));$('preferencesPanel').hidden=tab!=='preferences';$('archivedPanel').hidden=tab!=='archived';renderArchives();animateSurface($(tab==='preferences'?'preferencesPanel':'archivedPanel'));}
+function setSettingsTab(tab){
+  const panels={preferences:'preferencesPanel',componentPresets:'componentPresetsPanel',archived:'archivedPanel'};
+  document.querySelectorAll('[data-settings-tab]').forEach(el=>el.classList.toggle('active',el.dataset.settingsTab===tab));
+  for(const [name,id] of Object.entries(panels))$(id).hidden=name!==tab;
+  if(tab==='archived')renderArchives();
+  if(tab==='componentPresets')renderComponentPresets();
+  animateSurface($(panels[tab]));
+}
+function renderComponentPresets(){
+  const fields=$('componentPresetFields');
+  fields.replaceChildren();
+  for(const [type,d] of Object.entries(definitions)){
+    const defaults=component('',type,0,0),preset=store.data.settings.componentPresets[type]??{};
+    const group=document.createElement('fieldset');
+    const legend=document.createElement('legend');
+    legend.textContent=d.name;
+    group.append(legend);
+    const addField=(property,label,unit,parse,validate,options)=>{
+      const row=document.createElement('label'),caption=document.createElement('span');
+      caption.textContent=unit?`${label} · ${unit}`:label;
+      const input=document.createElement(options?'select':'input');
+      if(options)input.replaceChildren(...options.map(([value,text])=>new Option(text,value)));
+      else{input.type='number';input.step='any';input.required=true;}
+      input.dataset.presetType=type;
+      input.dataset.presetProperty=property;
+      const current=()=>store.data.settings.componentPresets[type]?.[property]??defaults[property];
+      const show=value=>{input.value=String(property==='slider'?value*100:value);};
+      show(preset[property]??defaults[property]);
+      input.onchange=()=>{
+        const value=parse(input.value);
+        if(input.value===''||!validate(value)){show(current());toast('请输入合法的元件参数');return;}
+        tryStore(()=>store.componentPreset(type,{[property]:value}));
+        show(current());
+      };
+      row.append(caption,input);
+      group.append(row);
+    };
+    if(d.unit)addField('value',valueParameters[type]?.[0]??'电阻值',d.unit,Number,value=>validComponentValue(type,value));
+    if(type==='battery')addField('internalResistance','电池内阻','Ω',Number,validInternalResistance);
+    if(type==='rheostat')addField('slider','滑片位置','%',value=>Number(value)/100,value=>value>=0&&value<=1);
+    if(type==='switch')addField('closed','初始状态','',value=>value==='true',()=>true,[[true,'闭合'],[false,'断开']]);
+    if(type==='spdt')addField('position','接通支路','',Number,value=>[1,2].includes(value),[[1,'支路 1'],[2,'支路 2']]);
+    if(group.childElementCount>1)fields.append(group);
+  }
+}
 function pushHistory(before=state){history.push(clone(before));if(history.length>80)history.shift();redo=[];updateHistoryButtons();}
 function updateHistoryButtons(){$('undoButton').disabled=!history.length;$('redoButton').disabled=!redo.length;}
 function restoreHistory(next){simulation.reset();const records=state.records,showCurrent=state.showCurrent,viewMode=state.viewMode;state=clone(next);state.records=records;state.showCurrent=showCurrent;if(state.viewMode!==viewMode)convertView(state,viewMode);cancelWire();gesture=null;if(!getItem(selected)&&!getWire(selected))selected=null;update({route:false});}
@@ -140,27 +187,65 @@ function renderProperties(){
   if(n){const count=state.wires.filter(w=>w.a===`${n.id}:0`||w.b===`${n.id}:0`).length;panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('junction')}</span><div><strong>接线节点 ${n.id.toUpperCase()}</strong></div></div><div class="junction-property">已连接 <b>${count}</b> 条导线<br>X ${fixed(n.x,0)} · Y ${fixed(n.y,0)}<br>对电源负极电位 <b id="selectedVoltage">—</b></div><p class="node-instructions">选择模式可拖动节点。导线工具下，点击或拖动此节点开始连接。</p><div class="property-actions"><button id="startNodeWire">${icon('junction')}从此节点连接</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;$('startNodeWire').onclick=()=>{setTool('junction');beginWire(`${n.id}:0`);};$('deleteSelected').onclick=()=>deleteSelected();renderReadings();return;}
   if(w){panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${icon('wire')}</span><div><strong>导线</strong></div></div><p class="node-instructions">使用接线节点工具点击导线，可以插入分支节点。普通导线交叉不会自动接通。</p><div class="property-actions"><button id="insertNodeTool">${icon('junction')}接线节点</button><button id="deleteSelected">${icon('trash')}删除导线</button></div>`;$('insertNodeTool').onclick=()=>setTool('junction');$('deleteSelected').onclick=()=>deleteSelected();return;}
   if(!c){panel.replaceChildren();return;}
-  const d=definitions[c.type],parameter={battery:['电源电动势','E'],capacitor:['电容量','C'],inductor:['电感量','L'],fuse:['额定电流','I'],rheostat:['最大阻值','R'],motor:['线圈电阻','r'],led:['正向压降','U']}[c.type]??['电阻值','R'];
-  panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${partThumbnail(c.type,'inspector')}</span><div><strong>${d.name} ${label(c)}</strong></div></div>`+(d.unit?`<div class="property-label"><span>${parameter[0]}</span><b>${parameter[1]}</b></div><label class="value-input"><input id="propertyNumber" type="number" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="${d.name} ${label(c)} ${parameter[0]}"><span>${d.unit}</span></label><input id="propertyRange" type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="滑动调整${d.name}"><div class="range-labels"><span>${d.min} ${d.unit}</span><span>${d.max} ${d.unit}</span></div>`:c.type==='switch'?`<button id="switchToggle" class="switch-action">${c.closed?'断开开关':'闭合开关'}</button>`:c.type==='spdt'?`<div class="property-label"><span>接通支路</span><b>C → ${c.position}</b></div><div class="spdt-options" role="group" aria-label="双掷开关接通支路">${[1,2].map(position=>`<button class="switch-action ${c.position===position?'active':''}" data-spdt-position="${position}" aria-pressed="${c.position===position}">公共端 → ${position}</button>`).join('')}</div>`:'')+(c.type==='fuse'&&c.blown?'<button id="replaceFuse" class="switch-action">更换保险丝</button>':'')+`<div class="component-readings"><span>U<b id="selectedVoltage">—</b></span><span>I<b id="selectedCurrent">—</b></span></div><div class="component-power">电功率 <b id="selectedPower">—</b></div><div class="property-actions"><button id="rotateComponent">${icon('rotate')}旋转 90°</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;
+  const d=definitions[c.type],parameter=valueParameters[c.type]??['电阻值','R'];
+  panel.innerHTML=`<div class="selected-info"><span class="selected-icon">${partThumbnail(c.type,'inspector')}</span><div><strong>${d.name} ${label(c)}</strong></div></div>`+(d.unit?`<div class="property-label"><span>${parameter[0]}</span><b>${parameter[1]}</b></div><label class="value-input"><input id="propertyNumber" type="number" step="any" required value="${c.value}" aria-label="${d.name} ${label(c)} ${parameter[0]}"><span>${d.unit}</span></label><input id="propertyRange" type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${c.value}" aria-label="滑动调整${d.name}"><div class="range-labels"><span>${d.min} ${d.unit}</span><span>${d.max} ${d.unit}</span></div>`:c.type==='switch'?`<button id="switchToggle" class="switch-action">${c.closed?'断开开关':'闭合开关'}</button>`:c.type==='spdt'?`<div class="property-label"><span>接通支路</span><b>C → ${c.position}</b></div><div class="spdt-options" role="group" aria-label="双掷开关接通支路">${[1,2].map(position=>`<button class="switch-action ${c.position===position?'active':''}" data-spdt-position="${position}" aria-pressed="${c.position===position}">公共端 → ${position}</button>`).join('')}</div>`:'')+(c.type==='fuse'&&c.blown?'<button id="replaceFuse" class="switch-action">更换保险丝</button>':'')+`<div class="component-readings"><span>U<b id="selectedVoltage">—</b></span><span>I<b id="selectedCurrent">—</b></span></div><div class="component-power">电功率 <b id="selectedPower">—</b></div><div class="property-actions"><button id="rotateComponent">${icon('rotate')}旋转 90°</button><button id="deleteSelected">${icon('trash')}删除</button></div>`;
   $('rotateComponent').onclick=()=>{const before=clone(state);pushHistory();moveItem(state,c.id,{angle:(c.angle+90)%360},before);update({route:false});};$('deleteSelected').onclick=()=>deleteSelected();
   document.querySelectorAll('[data-spdt-position]').forEach(button=>button.onclick=()=>{if(c.position!==Number(button.dataset.spdtPosition))toggleSwitch(c.id);});
   if($('switchToggle'))$('switchToggle').onclick=()=>toggleSwitch(c.id);if($('replaceFuse'))$('replaceFuse').onclick=()=>{pushHistory();c.blown=false;update();};
-  if(d.unit){let before=null;for(const id of ['propertyNumber','propertyRange']){const input=$(id);input.addEventListener('focus',()=>before=clone(state));input.addEventListener('pointerdown',()=>before=clone(state));input.addEventListener('input',()=>{const v=Number(input.value);if(input.value===''||!Number.isFinite(v)||v<d.min||v>d.max)return;if(!before)before=clone(state);c.value=Math.round(v*100)/100;$(id==='propertyNumber'?'propertyRange':'propertyNumber').value=c.value;recompute();renderBoard();renderReadings();audio.sync(activeId?state.components:[],solution.components,store.data.settings);saveSoon();});input.addEventListener('change',()=>{if(before&&JSON.stringify(before.components)!==JSON.stringify(state.components))pushHistory(before);before=null;if(input.value===''||Number(input.value)<d.min||Number(input.value)>d.max){input.value=c.value;toast(`请输入 ${d.min}–${d.max} ${d.unit}`);}if(c.type==='fuse'&&c.blown)renderProperties();});}}
+  if(d.unit)bindComponentParameter(c,'value',{number:$('propertyNumber'),range:$('propertyRange'),valid:value=>validComponentValue(c.type,value)});
   if(isMeter(c.type)){const connection=meterConnection(c,state.wires),reading=solution.components[c.id],value=reading?.[c.type==='ammeter'?'current':'voltage']??0,scale=meterScale(value,connection.range);panel.querySelector('.property-actions').insertAdjacentHTML('beforebegin',`<div class="meter-range-info"><strong>当前量程：0–${connection.range} ${c.type==='ammeter'?'A':'V'}</strong><p>左柱为公共负端，中柱为小量程正端，右柱为大量程正端。更换正接线柱即可更改量程。</p>${connection.conflict?'<b class="meter-warning">两个正接线柱同时接线，请保留一个。</b>':scale.overload?'<b class="meter-warning">已超量程，请改接大量程或减小被测值。</b>':scale.reversed?'<b class="meter-warning">电表反接，请检查正负接线柱。</b>':''}</div>`);}
   renderComponentControls(c);renderReadings();
+}
+function bindComponentParameter(c,property,{number,range,scale=1,valid}){
+  let before;
+  function applyValue(value){
+    c[property]=value;
+    recompute();
+    renderBoard();
+    renderReadings();
+    audio.sync(activeId?state.components:[],solution.components,store.data.settings);
+    saveSoon();
+  }
+  if(number){
+    number.onchange=()=>{
+      const value=number.valueAsNumber;
+      if(!valid(value)){
+        number.value=c[property];
+        toast('请输入合法的元件参数');
+        return;
+      }
+      if(value===c[property])return;
+      pushHistory();
+      applyValue(value);
+      if(range)range.value=value*scale;
+      if(c.type==='fuse'&&c.blown)renderProperties();
+    };
+  }
+  if(range){
+    range.oninput=()=>{
+      before??=clone(state);
+      applyValue(range.valueAsNumber/scale);
+      if(number)number.value=c[property];
+    };
+    range.onchange=()=>{
+      if(before&&before.components.find(item=>item.id===c.id)?.[property]!==c[property])pushHistory(before);
+      before=null;
+      if(c.type==='fuse'&&c.blown)renderProperties();
+    };
+  }
 }
 function renderComponentControls(c){
   const actions=$('componentProperties').querySelector('.property-actions');
   if(isMeter(c.type)){const info=$('componentProperties').querySelector('.meter-range-info');info.querySelector('.meter-warning')?.remove();info.insertAdjacentHTML('beforeend','<b id="meterWarning" class="meter-warning" role="status" hidden></b>');}
   let html=`<p class="component-model-note">${definitions[c.type].note??''}</p>`;
-  if(c.type==='battery')html+=`<label class="property-label" for="internalResistance">电池内阻 r<span>Ω</span></label><label class="value-input"><input id="internalResistance" type="number" min="0" max="100" step="0.1" value="${c.internalResistance??0}" aria-label="电池内阻"><span>Ω</span></label><div id="componentPhysics" class="component-physics"></div>`;
+  if(c.type==='battery')html+=`<label class="property-label" for="internalResistance">电池内阻 r<span>Ω</span></label><label class="value-input"><input id="internalResistance" type="number" step="any" required value="${c.internalResistance??0}" aria-label="电池内阻"><span>Ω</span></label><div id="componentPhysics" class="component-physics"></div>`;
   if(c.type==='rheostat')html+=`<label class="property-label" for="sliderPosition">滑片位置 P<span id="sliderPercent">${Math.round((c.slider??1)*100)}%</span></label><input id="sliderPosition" type="range" min="0" max="100" step="1" value="${(c.slider??1)*100}" aria-label="滑片位置"><div class="range-labels"><span>A 左端</span><span>B 右端</span></div><div id="componentPhysics" class="component-physics"></div>`;
   if(c.type==='motor')html+=`<button id="motorStall" class="switch-action" aria-pressed="${c.stalled}">${c.stalled?'释放转子':'按住转子（堵转）'}</button><div id="componentPhysics" class="component-physics"></div>`;
   if(c.type==='capacitor')html+=`<label class="property-label" for="simulationRate">观察速度</label><select id="simulationRate" aria-label="充放电观察速度"><option value="1">正常速度</option><option value="0.1">慢放 10 倍</option><option value="0.01">慢放 100 倍</option></select><button id="dischargeCapacitor" class="switch-action">清空电荷，重新观察</button><div id="componentPhysics" class="component-physics"></div>`;
   if(c.type==='led')html+='<div id="componentPhysics" class="component-physics" role="status"></div>';
   actions.insertAdjacentHTML('beforebegin',`<div class="component-controls">${html}</div>`);
-  const bind=(id,property,min,max,scale=1)=>{const input=$(id);if(!input)return;let before=null;input.onfocus=input.onpointerdown=()=>before=clone(state);input.oninput=()=>{const value=Number(input.value)*scale;if(input.value===''||!Number.isFinite(value)||value<min||value>max)return;before??=clone(state);c[property]=value;recompute();renderBoard();renderReadings();audio.sync(activeId?state.components:[],solution.components,store.data.settings);saveSoon();};input.onchange=()=>{if(before&&before.components.find(item=>item.id===c.id)?.[property]!==c[property])pushHistory(before);before=null;input.value=c[property]/scale;};};
-  bind('internalResistance','internalResistance',0,100);bind('sliderPosition','slider',0,1,.01);
+  if($('internalResistance'))bindComponentParameter(c,'internalResistance',{number:$('internalResistance'),valid:validInternalResistance});
+  if($('sliderPosition'))bindComponentParameter(c,'slider',{range:$('sliderPosition'),scale:100,valid:value=>value>=0&&value<=1});
   if($('motorStall'))$('motorStall').onclick=()=>{pushHistory();c.stalled=!c.stalled;update({route:false});};
   if($('simulationRate')){$('simulationRate').value=String(state.simulationRate??1);$('simulationRate').onchange=()=>{state.simulationRate=Number($('simulationRate').value);saveSoon();};}
   if($('dischargeCapacitor'))$('dischargeCapacitor').onclick=()=>{pushHistory();simulation.discharge(c.id,state.components);update({route:false});};
@@ -191,11 +276,11 @@ async function setViewMode(mode){if(converting||!activeId||!['schematic','physic
 function setTool(next){tool=next;cancelWire();document.querySelectorAll('button[data-tool]').forEach(el=>{el.classList.toggle('active',el.dataset.tool===tool);el.setAttribute('aria-pressed',String(el.dataset.tool===tool));});$('board').dataset.tool=tool;if(solution)renderBoard();}
 function select(id){selected=id;renderBoard();renderProperties();}
 function toggleSwitch(id){const c=getComponent(id);if(!['switch','spdt'].includes(c?.type))return;lastSwitchClick=null;pushHistory();selected=c.id;pendingTerminal=null;if(c.type==='spdt')c.position=c.position===1?2:1;else c.closed=!c.closed;update();}
-function addComponent(type,point){if(!activeId)return;if(!Object.hasOwn(definitions,type))return;if(state.components.length>=200){toast('元件较多，请先保存当前实验后继续其他实验。');return;}pushHistory();const num=state.components.filter(c=>c.type===type).reduce((m,c)=>Math.max(m,Number(c.id.slice(1))),0)+1,prefix=definitions[type].idPrefix??({battery:'e',lamp:'l',resistor:'r',switch:'s',ammeter:'a',voltmeter:'v'}[type]??type[0]);const p=point??{x:camera.x+((state.nextId%3)-1)*110,y:camera.y+((Math.floor(state.nextId/3)%2)?45:-45)};const c=component(`${prefix}${num}`,type,Math.round(p.x/10)*10,Math.round(p.y/10)*10,undefined,0);state.components.push(c);state.nextId++;state.preset='free';selected=c.id;cancelWire();update();}
+function addComponent(type,point){if(!activeId)return;if(!Object.hasOwn(definitions,type))return;if(state.components.length>=200){toast('元件较多，请先保存当前实验后继续其他实验。');return;}pushHistory();const num=state.components.filter(c=>c.type===type).reduce((m,c)=>Math.max(m,Number(c.id.slice(1))),0)+1,prefix=definitions[type].idPrefix??({battery:'e',lamp:'l',resistor:'r',switch:'s',ammeter:'a',voltmeter:'v'}[type]??type[0]);const p=point??{x:camera.x+((state.nextId%3)-1)*110,y:camera.y+((Math.floor(state.nextId/3)%2)?45:-45)};const c=component(`${prefix}${num}`,type,Math.round(p.x/10)*10,Math.round(p.y/10)*10,undefined,0);Object.assign(c,store.data.settings.componentPresets[type]);state.components.push(c);state.nextId++;state.preset='free';selected=c.id;cancelWire();update();}
 function deleteSelected(id=selected){if(!id)return;pushHistory();if(getWire(id))state.wires=state.wires.filter(w=>w.id!==id);else{state.components=state.components.filter(c=>c.id!==id);state.junctions=state.junctions.filter(n=>n.id!==id);state.wires=state.wires.filter(w=>!w.a.startsWith(id+':')&&!w.b.startsWith(id+':'));}selected=null;pendingTerminal=null;state.preset='free';update();}
 function nextWire(){return `w${Date.now()}${state.nextId++}`;}
 function makeWire(source,target){const wire={id:nextWire(),a:source,b:target};if(state.viewMode==='physical'){const scale=viewportGeometry(camera,zoom,$('boardWrap').getBoundingClientRect()).scale;wire.physicalVia=tracedRoute(pendingTrace,terminalPoint(source),terminalPoint(target),.75/scale);}return wire;}
-function connectTerminal(key){if(!pendingTerminal){beginWire(key);return;}if(pendingTerminal===key){cancelWire();renderBoard();return;}if(state.wires.some(w=>(w.a===pendingTerminal&&w.b===key)||(w.b===pendingTerminal&&w.a===key))){cancelWire();renderBoard();toast('这两个接线端已经连接');return;}if(state.wires.length>=1000){toast('导线较多，请保存并整理当前实验。');return;}pushHistory();state.wires.push(makeWire(pendingTerminal,key));cancelWire();state.preset='free';update();if(solution.status==='short')toast('检测到电源短路，请断开跨接导线或串入电阻。');}
+function connectTerminal(key){if(!pendingTerminal){beginWire(key);return;}if(pendingTerminal===key){cancelWire();renderBoard();return;}if(state.wires.some(w=>(w.a===pendingTerminal&&w.b===key)||(w.b===pendingTerminal&&w.a===key))){cancelWire();renderBoard();toast('这两个接线端已经连接');return;}if(state.wires.length>=1000){toast('导线较多，请保存并整理当前实验。');return;}pushHistory();state.wires.push(makeWire(pendingTerminal,key));cancelWire();state.preset='free';update();}
 function placeJunction(point,wireId=null){
   const scale=viewportGeometry(camera,zoom,$('boardWrap').getBoundingClientRect()).scale;
   if(!wireId){const keys=[...state.components.flatMap(c=>visibleTerminals(c,state.wires,state.viewMode).map(i=>`${c.id}:${i}`)),...state.junctions.map(n=>`${n.id}:0`)],snap=nearestConnection(state.wires,keys,point,terminalPoint,state.viewMode,9/scale);if(snap?.terminal){connectTerminal(snap.terminal);return;}if(snap?.wire)wireId=snap.wire;}
@@ -282,12 +367,92 @@ $('board').addEventListener('wheel',e=>{e.preventDefault();const delta=e.deltaY*
 $('board').addEventListener('keydown',event=>{const terminal=event.target.closest('[data-terminal]'),node=event.target.closest('[data-junction]'),comp=event.target.closest('[data-component]'),wire=event.target.closest('[data-wire]'),id=node?.dataset.junction??comp?.dataset.component??wire?.dataset.wire??terminal?.dataset.ownerComponent;if(['Enter',' '].includes(event.key)){event.preventDefault();if(tool==='erase')deleteSelected(id);else if(tool==='junction'&&terminal)connectTerminal(terminal.dataset.terminal);else if(tool==='junction'&&wire){const p=wirePoints(getWire(wire.dataset.wire),terminalPoint,state.viewMode);if(p.length>1)placeJunction({x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2},wire.dataset.wire);}else select(id);}if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)&&id&&getItem(id)&&tool!=='erase'){event.preventDefault();pushHistory();const item=getItem(id),before=clone(state);moveItem(state,id,{x:item.x+(event.key==='ArrowRight'?10:event.key==='ArrowLeft'?-10:0),y:item.y+(event.key==='ArrowDown'?10:event.key==='ArrowUp'?-10:0)},before);selected=id;update({route:false});$('board').querySelector(`[${node?'data-junction':'data-component'}="${id}"]`)?.focus({preventScroll:true});}});
 
 function isFullscreen(){return nativeFullscreen||!!document.fullscreenElement;}
-function renderFullscreen(){const active=isFullscreen(),button=$('fullscreenButton'),label=active?'退出全屏':'全屏';button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',label);button.title=label+(active?' (Esc)':' (F)');button.innerHTML=icon(active?'collapse':'expand')+'<span>'+label+'</span>';requestAnimationFrame(fitHeader);}
+function renderFullscreen(){
+  const active=isFullscreen(),button=$('fullscreenButton'),label=active?'退出全屏':'全屏';
+  button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',label);
+  button.title=label+(active?' (Esc)':' (F)');button.innerHTML=icon(active?'collapse':'expand')+'<span>'+label+'</span>';
+  if(desktop)renderDesktopChrome();
+  requestAnimationFrame(fitHeader);
+}
+let desktopState={left:[],right:[],macos:false,maximized:false};
+function renderDesktopChrome(){
+  const merged=desktopTitleBarHidden&&!isFullscreen();
+  document.body.classList.toggle('desktop-frameless',desktopTitleBarHidden);
+  const header=document.querySelector('.site-header');
+  for(const area of [header,header.querySelector('.window-drag-area')]){
+    if(merged)area.setAttribute('data-tauri-drag-region','deep');
+    else area.removeAttribute('data-tauri-drag-region');
+  }
+  for(const [id,side] of [['windowControlsLeft','left'],['windowControlsRight','right']]){
+    const group=$(id),actions=desktopState[side];
+    group.hidden=!merged||!actions.length;
+    group.classList.toggle('macos',desktopState.macos);
+    if(group.dataset.actions!==actions.join(',')){
+      group.dataset.actions=actions.join(',');
+      group.replaceChildren(...actions.map(action=>{
+        const button=document.createElement('button');
+        button.type='button';
+        button.dataset.windowAction=action;
+        button.onclick=async()=>{
+          if(action==='close')persist();
+          try{await desktop.invoke('desktop_window_action',{action});}
+          catch{toast('无法执行窗口操作');}
+          if(action==='maximize')void refreshDesktopState();
+        };
+        return button;
+      }));
+    }
+    for(const button of group.children){
+      const action=button.dataset.windowAction;
+      const text={close:'关闭窗口',minimize:'最小化窗口',maximize:desktopState.maximized?'还原窗口':'最大化窗口'}[action];
+      if(button.title===text)continue;
+      button.title=text;
+      button.setAttribute('aria-label',text);
+      button.innerHTML=icon({close:'close',minimize:'minus',maximize:desktopState.maximized?'restoreWindow':'maximize'}[action]);
+    }
+  }
+  $('headerToggle').disabled=merged;
+  if(merged&&document.body.classList.contains('header-collapsed'))setHeaderExpanded(true,{persist:false});
+  syncLayoutControls();
+}
+async function refreshDesktopState(){
+  if(desktopStatePending||fullscreenBusy)return;
+  desktopStatePending=true;
+  try{
+    const next=await desktop.invoke('desktop_window_state');
+    if(fullscreenBusy)return;
+    const changed=next.fullscreen!==nativeFullscreen||JSON.stringify(next)!==JSON.stringify(desktopState);
+    desktopState=next;
+    nativeFullscreen=next.fullscreen;
+    if(changed)renderFullscreen();
+  }catch{}finally{desktopStatePending=false;}
+}
+async function syncDesktopTitleBar(){
+  if(!desktop||desktopChromeBusy)return;
+  const setting=$('titleBarSetting'),hidden=store.data.settings.hideTitleBar;
+  setting.checked=hidden;
+  if(hidden===desktopTitleBarHidden)return;
+  desktopChromeBusy=true;setting.disabled=true;
+  try{
+    if(hidden){
+      desktopState=await desktop.invoke('desktop_window_state');
+      nativeFullscreen=desktopState.fullscreen;
+    }
+    await desktop.invoke('set_title_bar_hidden',{hidden});
+    desktopTitleBarHidden=hidden;
+    renderDesktopChrome();
+    restoreChrome();
+    requestAnimationFrame(fitHeader);
+  }catch{
+    setting.checked=desktopTitleBarHidden;
+    tryStore(()=>store.settings({hideTitleBar:desktopTitleBarHidden}));
+    toast('无法切换窗口标题栏');
+  }finally{desktopChromeBusy=false;setting.disabled=false;}
+}
 async function toggleFullscreen(){
   if(fullscreenBusy)return;fullscreenBusy=true;
   try{
     const bars=androidSystemBars();
-    const desktop=systemDesktop();
     if(desktop){const entering=!nativeFullscreen;await desktop.invoke('set_fullscreen',{fullscreen:entering});nativeFullscreen=entering;renderFullscreen();if(entering)fullscreenFocus=document.activeElement;else fullscreenFocus?.focus?.({preventScroll:true});return;}
     if(bars){const entering=!nativeFullscreen;await (entering?bars.hide():bars.show());nativeFullscreen=entering;renderFullscreen();if(!entering)fullscreenFocus?.focus?.({preventScroll:true});else fullscreenFocus=document.activeElement;return;}
     if(document.fullscreenElement){await document.exitFullscreen();return;}
@@ -302,7 +467,9 @@ const sidebarBreakpoint=matchMedia('(max-width:900px)');
 function syncLayoutControls(){
   const controls=$('layoutControls'),tools=$('componentPanel').querySelector('.tools-section');
   const inToolbar=!!activeId&&document.body.matches('.header-collapsed:not(.sidebar-open):not(.toolbar-collapsed)');
-  const parent=inToolbar?tools:document.body,focused=controls.contains(document.activeElement)?document.activeElement:null;
+  const inHeader=desktopTitleBarHidden&&!document.body.classList.contains('header-collapsed');
+  const parent=inToolbar?tools:inHeader?$('headerPanel').firstElementChild:document.body,focused=controls.contains(document.activeElement)?document.activeElement:null;
+  controls.classList.toggle('in-header',inHeader);
   controls.classList.toggle('in-toolbar',inToolbar);tools.classList.toggle('with-layout-controls',inToolbar);
   if(controls.parentElement!==parent){parent.prepend(controls);focused?.focus({preventScroll:true});}
 }
@@ -311,6 +478,7 @@ function closeSidebarOnNarrowScreens(){if(sidebarBreakpoint.matches)setSidebarEx
 function restoreSidebar(){let saved;try{saved=storage.getItem('circuit-lab-sidebar-expanded');}catch{}setSidebarExpanded(saved===null||saved===undefined?!sidebarBreakpoint.matches:saved==='true',{persist:false});}
 sidebarBreakpoint.addEventListener('change',restoreSidebar);
 function setHeaderExpanded(expanded,{persist=true}={}){
+  if(desktopTitleBarHidden&&!isFullscreen()){expanded=true;persist=false;}
   document.body.classList.toggle('header-collapsed',!expanded);$('headerPanel').inert=!expanded;
   if(!expanded)closeHeaderMenu();
   syncLayoutControls();
@@ -360,8 +528,10 @@ function applyTheme(){
   $('themeSetting').value=preference;document.querySelector('meta[name="theme-color"]').content=dark?'#171b26':'#7357ec';
   try{const bars=androidSystemBars();if(bars?.setStyle)bars.setStyle({style:dark?'DARK':'LIGHT'}).catch(()=>{});}catch{}
 }
-function applyUiScale(){
-  const value=normalizeUiScale(store.data.settings.uiScale);document.documentElement.style.setProperty('--ui-scale',value);if(![...$('uiScaleSetting').options].some(option=>option.value===String(value)))$('uiScaleSetting').add(new Option(`${Math.round(value*100)}%`,String(value)));$('uiScaleSetting').value=String(value);
+function applyUiScale(value=normalizeUiScale(store.data.settings.uiScale)){
+  document.documentElement.style.setProperty('--ui-scale',value);
+  $('uiScaleSetting').value=String(value*100);
+  $('uiScaleValue').textContent=value*100+'%';
   libraryDrag.cancel();stopCameraAnimation();
   updateScaleLayout();
   requestAnimationFrame(()=>{updateDock();fitHeader();updateViewport();updatePropertiesTitle();});
@@ -411,7 +581,23 @@ $('headerToggle').onclick=()=>setHeaderExpanded(document.body.classList.contains
 $('sidebarToggle').onclick=()=>setSidebarExpanded(!document.body.classList.contains('sidebar-open'));$('sidebarScrim').onclick=()=>setSidebarExpanded(false);
 $('settingsButton').onclick=()=>{setSettingsTab('preferences');applyTheme();$('soundSetting').checked=store.data.settings.sound;$('motionSetting').checked=store.data.settings.motion;$('volumeSetting').value=Math.round(store.data.settings.volume*100);$('volumeValue').textContent=$('volumeSetting').value+'%';$('recoverDraftButton').hidden=!(store.data.draft??legacy);openDialog('settingsDialog');};
 $('themeSetting').onchange=()=>{const theme=$('themeSetting').value;try{store.settings({theme});}catch{store.data.settings.theme=theme;toast('外观设置暂未保存');}applyTheme();};
-$('uiScaleSetting').onchange=()=>{const value=normalizeUiScale(Number($('uiScaleSetting').value));try{store.settings({uiScale:value});}catch{store.data.settings.uiScale=value;toast('界面缩放暂未保存');}applyUiScale();};
+if(desktop){
+  $('titleBarSettingRow').hidden=false;
+  $('titleBarSetting').onchange=()=>{
+    tryStore(()=>store.settings({hideTitleBar:$('titleBarSetting').checked}));
+    void syncDesktopTitleBar();
+  };
+  let resizeTimer;
+  window.addEventListener('resize',()=>{
+    if(!desktopTitleBarHidden)return;
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(refreshDesktopState,120);
+  });
+  window.addEventListener('focus',()=>void refreshDesktopState());
+  setInterval(()=>{if(desktopTitleBarHidden&&!document.hidden)void refreshDesktopState();},1500);
+}
+$('uiScaleSetting').oninput=()=>{$('uiScaleValue').textContent=$('uiScaleSetting').value+'%';};
+$('uiScaleSetting').onchange=()=>{const value=Number($('uiScaleSetting').value)/100;try{store.settings({uiScale:value});}catch{store.data.settings.uiScale=value;toast('界面缩放暂未保存');}applyUiScale();};
 document.querySelectorAll('[data-settings-tab]').forEach(el=>el.onclick=()=>setSettingsTab(el.dataset.settingsTab));
 for(const id of ['soundSetting','motionSetting','volumeSetting'])$(id).oninput=()=>{const next={sound:$('soundSetting').checked,motion:$('motionSetting').checked,volume:Number($('volumeSetting').value)/100};try{store.settings(next);}catch{Object.assign(store.data.settings,next);toast('设置暂未保存');}$('volumeValue').textContent=$('volumeSetting').value+'%';renderAudioState();renderBoard();audio.sync(activeId?state.components:[],solution.components,store.data.settings);};
 $('archivedList').onclick=event=>{const restore=event.target.closest('[data-restore-experiment]'),del=event.target.closest('[data-delete-experiment]');if(restore){if(tryStore(()=>store.restore(restore.dataset.restoreExperiment)))toast('实验已恢复到列表');}if(del)deleteExperiment(del.dataset.deleteExperiment);};
@@ -430,7 +616,7 @@ window.addEventListener('storage',event=>{
     if(removed){next.draft=draft;next.draftName=name;activeId=null;stopCameraAnimation();resetGestures();}
     next.activeId=activeId;store.data=next;
     if(removed){try{store.recover(draft,name);toast('当前实验已在其他页面归档或删除，编辑内容可在设置中恢复。');}catch{toast('当前实验已在其他页面移除，请在设置中导出备份以保留编辑内容。');}}
-    applyTheme();applyUiScale();renderSidebar();renderTitle();renderArchives();
+    applyTheme();applyUiScale();renderSidebar();renderTitle();renderArchives();void syncDesktopTitleBar();
   }catch{}
 });
 let simulationTime=performance.now(),simulationSaved=simulationTime;
@@ -443,5 +629,6 @@ setInterval(()=>{
   if(now-simulationSaved>2000){simulationSaved=now;saveSoon();}
 },50);
 renderLibrary();renderSidebar();renderTitle();setTool('select');update();renderArchives();renderAudioState();restoreSidebar();restoreChrome();renderFullscreen();applyTheme();applyUiScale();fitHeader();
+void syncDesktopTitleBar();
 
 $('recoverDraftButton').onclick=()=>{const draft=store.data.draft??legacy;if(!draft)return;askName('恢复为新实验',store.data.draftName==='未保存的实验'?'恢复的实验':store.data.draftName,name=>{if(!tryStore(()=>{activeId=store.save(draft,name);draftName=name;}))return;restoreState(draft);$('settingsDialog').close();closeSidebarOnNarrowScreens();toast('草稿已恢复为实验，后续修改自动保存');},'创建');};

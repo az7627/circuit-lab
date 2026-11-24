@@ -3,6 +3,7 @@ import {feedbackLevel,lampAppearance} from './visuals.js?v=2.6';
 import {terminalIndices} from './terminals.js?v=2.6';
 import {componentTerminal} from './visuals.js?v=2.6';
 import {bellResponse} from './audio.js?v=2.6';
+import {ledLevel} from './led.js';
 
 // Terminal identities stay stable; student meters expose three physical binding posts.
 const extents={battery:[-58,-32,58,32],lamp:[-58,-56,58,29],resistor:[-58,-19,58,19],switch:[-58,-39,58,24],spdt:[-58,-42,58,42],ammeter:[-58,-45,58,49],voltmeter:[-58,-45,58,49],rheostat:[-58,-58,58,31],motor:[-58,-33,58,37],bell:[-37,-36,37,58],heater:[-58,-28,58,28],capacitor:[-58,-29,58,29],led:[-58,-32,58,18],inductor:[-58,-25,58,25],fuse:[-58,-17,58,17]};
@@ -47,8 +48,8 @@ export function physicalSymbol(c,{thumbnail=false,power=0,current=0,voltage=0,ra
     body+=`<g class="physical-bell-hammer ${!thumbnail&&motion&&level>.001?'bell-vibrating':''}" style="--bell-period:${response.period}s;--bell-amplitude:${response.amplitude}px;animation-delay:-${time%response.period}s"><path d="M17 33h13V12" fill="none" stroke="#657580" stroke-width="3"/><circle cx="30" cy="10" r="4" fill="#5b6f7d"/></g>`;
   }
   if(c.type==='led'){
-    const brightness=thumbnail?0:Math.min(1,Math.max(0,current)/.02);
-    body=`${lead('M-54 0h32M22 0h32')}<path d="M-22 0h44" stroke="#647582" stroke-width="3"/><path class="physical-led-body" d="M-18 12V-9a18 18 0 0 1 36 0v21Z" fill="${brightness?`rgb(255,${Math.round(130-60*brightness)},${Math.round(116-52*brightness)})`:'#bf7771'}" stroke="#a45049"/><path d="M-22 12h44v5h-44Z" fill="#c88f88" stroke="#a45049"/><path d="M-11-10q0-8 9-9" fill="none" stroke="#fff" stroke-width="3" opacity=".6"/>${brightness?`<circle class="led-glow" cy="-6" r="30" fill="#ff6958" opacity="${brightness*.2}"/>`:''}${text(c,-36,-8,'+',10)}${text(c,35,-8,'−',10)}`;
+    const brightness=thumbnail?0:ledLevel(current);
+    body=`${lead('M-54 0h32M22 0h32')}<path d="M-22 0h44" stroke="#647582" stroke-width="3"/><path class="physical-led-body" d="M-18 12V-9a18 18 0 0 1 36 0v21Z" fill="rgb(${Math.round(170+85*brightness)},${Math.round(90+45*brightness)},${Math.round(88+23*brightness)})" stroke="#a45049"/><path d="M-22 12h44v5h-44Z" fill="#c88f88" stroke="#a45049"/><path d="M-11-10q0-8 9-9" fill="none" stroke="#fff" stroke-width="3" opacity=".6"/>${brightness?`<circle class="led-glow" cy="-6" r="${20+22*brightness}" fill="#ff4938" opacity="${brightness*.45}"/>`:''}${text(c,-36,-8,'+',10)}${text(c,35,-8,'−',10)}`;
   }
   return `${defs}<g class="physical-part ${c.type==='bell'&&level>.001?'is-powered':''}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1">${body}</g>`;
 }

@@ -1,4 +1,4 @@
-import {solveCircuit,motorBackEmf} from './solver.js?v=2.6';
+import {solveCircuit,motorBackEmf} from './solver.js?v=2.10.0-beta.5';
 
 /** Runtime memory is separate from drawing history. Merely selecting or moving
  * a part never advances time, recharges a capacitor or restarts a motor. */
@@ -24,7 +24,7 @@ export class CircuitSimulation {
     const steps=Math.max(1,Math.ceil(Math.min(.1,Math.max(.000001,elapsed))/.01)),dt=Math.min(.1,Math.max(.000001,elapsed))/steps;
     let result;
     for(let i=0;i<steps;i++){
-      result=solveCircuit(components,wires,junctions,this.context(components,dt));if(result.status==='invalid'||result.status==='short')return result;
+      result=solveCircuit(components,wires,junctions,this.context(components,dt));if(result.status==='invalid')return result;
       for(const c of components){
         const r=result.components[c.id];
         if(c.type==='capacitor'){const memory=this.capacitors.get(c.id);memory.voltage=r.voltage-r.current*.05;c.chargeVoltage=memory.voltage;}

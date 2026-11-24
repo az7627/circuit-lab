@@ -67,15 +67,29 @@ test('an open switch interrupts current and carries the battery voltage', () => 
   close(closed.components.s.current, 0.6);
 });
 
-test('a battery short is detected without inventing a large current', () => {
+test('a directly shorted ideal battery uses the fallback series resistance and leaves a bypassed load unpowered', () => {
   const result = solveCircuit([battery()], [wire('b:0', 'b:1')]);
   assert.equal(result.status, 'short');
-  assert.equal(result.powered, false);
-  assert.equal(result.current, 0);
+  assert.equal(result.powered, true);
+  close(result.current,12);
   assert.equal(result.resistance, 0);
-  assert.equal(result.wires['b:0-b:1'], 0);
+  close(result.wires['b:0-b:1'],12);
+  close(result.components.b.internalPower,72);
+  assert.doesNotMatch(result.message,/短路/);
   finite(result);
   assert.equal(solveCircuit([battery('tiny', 1e-10)], [wire('tiny:0', 'tiny:1')]).status, 'short');
+  const withLamp=solveCircuit([battery(),resistor('r')],[wire('b:0','b:1'),wire('b:0','r:0'),wire('r:1','b:1')]);
+  close(withLamp.components.r.current,0);
+  close(withLamp.wires['b:0-b:1'],12);
+});
+
+test('a short across a series pack drives its loop without changing an independent ideal source',()=>{
+  const parts=[battery('b1',1.5),battery('b2',1.5),battery('b3',1.5),battery('b4'),resistor('r')];
+  const result=solveCircuit(parts,[wire('b1:1','b2:0'),wire('b2:1','b3:0'),wire('b1:0','b3:1'),wire('b4:0','r:0'),wire('r:1','b4:1')]);
+  assert.equal(result.status,'short');
+  close(result.wires['b1:0-b3:1'],3);
+  close(result.components.r.current,.6);
+  for(const id of ['b1','b2','b3'])close(result.components[id].internalPower,4.5);
 });
 
 test('an ideal ammeter in series reads signed current without changing the circuit', () => {

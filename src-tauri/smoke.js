@@ -1,6 +1,10 @@
 (async()=>{
   const invoke=window.__TAURI__.core.invoke,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const check=(value,message)=>{if(!value)throw new Error(message);};
+  async function until(test,message){
+    for(let n=0;n<100;n++){if(await test())return;await wait(40);}
+    throw new Error(message);
+  }
   try{
     for(let n=0;n<100&&!document.querySelector('[data-add]');n++)await wait(100);
     check(document.querySelectorAll('[data-add]').length===15,'元件库未加载');
@@ -8,7 +12,9 @@
       document.getElementById('emptyCreateButton').click();document.getElementById('experimentNameInput').value='系统 WebView 验证';document.getElementById('nameForm').requestSubmit();
       document.querySelector('[data-add="battery"]').click();await wait(350);
       document.getElementById('settingsButton').click();document.getElementById('themeSetting').value='dark';document.getElementById('themeSetting').dispatchEvent(new Event('change'));
-      document.getElementById('uiScaleSetting').value='1.25';document.getElementById('uiScaleSetting').dispatchEvent(new Event('change'));
+      document.getElementById('uiScaleSetting').value='125';document.getElementById('uiScaleSetting').dispatchEvent(new Event('change'));
+      const titleBar=document.getElementById('titleBarSetting');titleBar.checked=true;titleBar.dispatchEvent(new Event('change'));
+      await until(()=>document.body.classList.contains('desktop-frameless'),'隐藏标题栏未应用');
       document.getElementById('settingsDialog').close();await wait(250);
       check(document.documentElement.dataset.theme==='dark','深色主题未应用');
       sessionStorage.setItem('system-smoke-reload','1');location.reload();return;
@@ -17,7 +23,19 @@
     check(document.getElementById('activeExperimentName').textContent==='系统 WebView 验证','重载后实验丢失');
     check(document.querySelector('[data-component="e1"]'),'元件未保存');
     check(document.documentElement.dataset.theme==='dark','主题未保存');
-    check(document.documentElement.style.getPropertyValue('--ui-scale')==='1.25'&&document.getElementById('uiScaleSetting').value==='1.25','UI 缩放未保存');
+    check(document.documentElement.style.getPropertyValue('--ui-scale')==='1.25'&&document.getElementById('uiScaleSetting').value==='125','UI 缩放未保存');
+    await until(()=>document.body.classList.contains('desktop-frameless'),'标题栏设置未保存');
+    const chrome=await invoke('desktop_window_state');
+    check(!chrome.decorated,'原生标题栏仍然显示');
+    for(const [side,actions] of [['Left',chrome.left],['Right',chrome.right]]){
+      const actual=[...document.querySelectorAll(`#windowControls${side} button`)].map(button=>button.dataset.windowAction);
+      check(JSON.stringify(actual)===JSON.stringify(actions),'窗口按钮顺序与桌面设置不一致');
+    }
+    if(chrome.macos)check(chrome.left.join(',')==='close,minimize,maximize'&&!chrome.right.length,'macOS 红绿灯未放在左侧');
+    check(document.querySelector('.site-header[data-tauri-drag-region]'),'顶栏拖动区域未启用');
+    const headerToggle=document.getElementById('headerToggle');
+    headerToggle.click();
+    check(headerToggle.disabled&&!document.body.classList.contains('header-collapsed'),'窗口模式下允许收起顶栏');
     const data=JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'));
     const {serializeExperiment}=await import('./files.js');
     check(await invoke('save_experiment',{content:serializeExperiment(data.experiments[0].state,'系统 WebView 验证'),name:'实验.json'}),'原生导出失败');
@@ -26,7 +44,16 @@
     document.querySelector('[data-tool="select"]').click();document.querySelector('[data-component="e1"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     const flow=document.querySelector('.wire-flow');check(flow,'电流动画未显示');
     for(let i=0;i<20;i++){const input=document.getElementById('propertyRange');input.value=String(2+i*.4);input.dispatchEvent(new Event('input',{bubbles:true}));check(flow.isConnected&&document.querySelector('.wire-flow')===flow,'调节电压重建了电流动画');}
-    await invoke('set_fullscreen',{fullscreen:true});await invoke('set_fullscreen',{fullscreen:false});
-    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',uiScale:1.25,persistence:true,export:true,fullscreen:true,currentFlow:true}});
+    const fullscreen=document.getElementById('fullscreenButton');
+    fullscreen.click();
+    await until(()=>fullscreen.getAttribute('aria-pressed')==='true','未进入全屏');
+    headerToggle.click();
+    check(!headerToggle.disabled&&document.body.classList.contains('header-collapsed'),'全屏时不能收起顶栏');
+    fullscreen.click();
+    await until(()=>fullscreen.getAttribute('aria-pressed')==='false','未退出全屏');
+    check(headerToggle.disabled&&!document.body.classList.contains('header-collapsed'),'退出全屏后没有恢复顶栏');
+    const titleBar=document.getElementById('titleBarSetting');titleBar.checked=false;titleBar.dispatchEvent(new Event('change'));
+    await until(async()=>(await invoke('desktop_window_state')).decorated,'原生标题栏未恢复');
+    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',uiScale:1.25,persistence:true,export:true,fullscreen:true,currentFlow:true,titleBar:true}});
   }catch(error){await invoke('system_smoke_report',{report:{error:error.stack||String(error)}});}
 })();

@@ -11,9 +11,34 @@ class MemoryStorage{constructor(){this.values=new Map();this.fail=false;}getItem
 
 test('UI scale defaults, clamps invalid imports and persists across restart and backup normalization',()=>{
   const storage=new MemoryStorage(),store=new ExperimentStore(storage);assert.equal(store.data.settings.uiScale,1);
-  for(const scale of [.75,1,1.25,1.5,2]){store.settings({uiScale:scale});assert.equal(new ExperimentStore(storage).data.settings.uiScale,scale);}
+  for(const scale of [.25,.5,.75,1,1.25,1.5,1.75,2,2.25,2.5]){store.settings({uiScale:scale});assert.equal(new ExperimentStore(storage).data.settings.uiScale,scale);}
   const old=JSON.parse(storage.getItem(EXPERIMENTS_KEY));delete old.settings.uiScale;assert.equal(normalizeCollection(old).settings.uiScale,1);
-  for(const [value,expected]of [[null,1],['1.5',1],[-1,.75],[99,2]]){old.settings.uiScale=value;assert.equal(normalizeCollection(old).settings.uiScale,expected);}
+  for(const [value,expected]of [[null,1],['1.5',1],[-1,.25],[99,2.5],[.9,1],[1.1,1]]){old.settings.uiScale=value;assert.equal(normalizeCollection(old).settings.uiScale,expected);}
+});
+
+test('component presets survive reload and backup import and numeric values can exceed the slider range',()=>{
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage),state=createPreset('free');
+  state.components=[component('r1','resistor',0,0,1234.56789),{...component('e1','battery',0,0,-80),internalResistance:250}];
+  store.save(state,'扩展参数');
+  store.componentPreset('battery',{value:1.5,internalResistance:250});
+  store.componentPreset('battery',{value:4.5});
+  store.componentPreset('rheostat',{value:470,slider:.75});
+  store.componentPreset('switch',{closed:false});
+  store.componentPreset('spdt',{position:2});
+  const saved=new ExperimentStore(storage).data;
+  assert.deepEqual(saved.experiments[0].state.components,state.components);
+  const imported=new ExperimentStore(new MemoryStorage());
+  imported.import(saved);
+  assert.deepEqual(imported.data.settings.componentPresets,{
+    battery:{value:4.5,internalResistance:250},
+    spdt:{position:2},
+    rheostat:{value:470,slider:.75},
+    switch:{closed:false}
+  });
+  saved.settings.componentPresets.rheostat={value:-1,slider:3};
+  assert.equal(normalizeCollection(saved).settings.componentPresets.rheostat,undefined);
+  state.components[0].value=0;
+  assert.equal(normalizeState(state),null);
 });
 
 test('appearance defaults to the system and explicit choices survive reload and backup normalization',()=>{

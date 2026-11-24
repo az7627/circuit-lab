@@ -21,6 +21,8 @@ export const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>', rotate: '<path d="M20 9a8 8 0 1 0-2 9M20 3v6h-6"/>',
   junction: '<path d="M3 12h7m4 0h7M12 3v7m0 4v7"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
   fit:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M2 8V2h6m8 0h6v6M2 16v6h6m8 0h6v-6"/>',
+  maximize:'<rect x="5" y="5" width="14" height="14" rx="1"/>',
+  restoreWindow:'<path d="M8 5h11v11M5 8h11v11H5Z"/>',
   collapse:'<path d="M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5"/>',
   'chevron-up':'<path d="m6 15 6-6 6 6"/>',
   'chevron-down':'<path d="m6 9 6 6 6-6"/>',

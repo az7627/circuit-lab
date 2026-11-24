@@ -2,6 +2,8 @@ package io.circuitlab.embedded;
 
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
@@ -11,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.splashscreen.SplashScreen;
+import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -19,6 +22,7 @@ import java.io.File;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.mozilla.geckoview.GeckoRuntime;
 import org.mozilla.geckoview.GeckoRuntimeSettings;
@@ -34,6 +38,7 @@ public class EmbeddedActivity extends AppCompatActivity {
     private WebExtension.Port webPort;
     private String appUrl;
     private boolean fullscreen;
+    private JSONArray safeArea = new JSONArray(java.util.Arrays.asList(0,0,0,0));
     private JSONObject pendingSave;
     private WebExtension.Port savePort;
     private GeckoSession.PromptDelegate.FilePrompt pendingFile;
@@ -58,7 +63,28 @@ public class EmbeddedActivity extends AppCompatActivity {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
         SplashScreen.installSplashScreen(this);super.onCreate(state);EdgeToEdge.enable(this);
         GeckoView view=new GeckoView(this);setContentView(view);
-        ViewCompat.setOnApplyWindowInsetsListener(view,(v,insets)->{androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars()|WindowInsetsCompat.Type.displayCutout());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+            getWindow().setStatusBarContrastEnforced(false);
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(view, (v, insets) -> {
+            int bars = WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout();
+            int ime = WindowInsetsCompat.Type.ime();
+            boolean keyboard = insets.isVisible(ime);
+            Insets area = insets.getInsets(bars);
+            float density = v.getResources().getDisplayMetrics().density;
+            safeArea = new JSONArray(java.util.Arrays.asList(area.top / density, area.right / density,
+                keyboard ? 0 : area.bottom / density, area.left / density));
+            if (webPort != null) try {
+                webPort.postMessage(new JSONObject().put("event", "safeArea").put("insets", safeArea));
+            } catch (org.json.JSONException ignored) {}
+            v.setPadding(0, 0, 0, keyboard ? insets.getInsets(ime).bottom : 0);
+            return new WindowInsetsCompat.Builder(insets).setInsets(bars | ime, Insets.NONE).build();
+        });
         WindowCompat.getInsetsController(getWindow(),view).setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         if(runtime==null)runtime=GeckoRuntime.create(this,new GeckoRuntimeSettings.Builder().preferredColorScheme(GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM).build());
         session=new GeckoSession();
@@ -94,7 +120,7 @@ public class EmbeddedActivity extends AppCompatActivity {
     private void handle(WebExtension.Port port,JSONObject message){
         try{
             switch(message.optString("action")){
-                case "environment":reply(port,message,new JSONObject().put("smoke",smoke()),null);break;
+                case "environment":reply(port,message,new JSONObject().put("smoke",smoke()).put("insets",safeArea),null);break;
                 case "barsVisible":WindowInsetsCompat insets=ViewCompat.getRootWindowInsets(getWindow().getDecorView());reply(port,message,new JSONObject().put("status",insets!=null&&insets.isVisible(WindowInsetsCompat.Type.statusBars())).put("navigation",insets!=null&&insets.isVisible(WindowInsetsCompat.Type.navigationBars())),null);break;
                 case "hideBars":fullscreen=true;WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView()).hide(WindowInsetsCompat.Type.systemBars());reply(port,message,null,null);break;
                 case "showBars":fullscreen=false;WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView()).show(WindowInsetsCompat.Type.systemBars());reply(port,message,null,null);break;

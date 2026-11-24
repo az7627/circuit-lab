@@ -1,21 +1,37 @@
 export const definitions = {
-  battery: { name: '电源', english: 'DC power', prefix: 'E', note:'电动势与内阻可调 · 支持串联或并联', value: 6, unit: 'V', min: 1.5, max: 12, step: .5 },
-  lamp: { name: '小灯泡', english: 'Light bulb', prefix: 'L', value: 10, unit: 'Ω', min: 1, max: 50, step: 1 },
-  resistor: { name: '电阻', english: 'Resistor', prefix: 'R', value: 10, unit: 'Ω', min: 1, max: 100, step: 1 },
+  battery: { name: '电源', english: 'DC power', prefix: 'E', note:'电动势与内阻可调 · 支持串联或并联', value: 6, unit: 'V', min: 0, max: 24, step: .5 },
+  lamp: { name: '小灯泡', english: 'Light bulb', prefix: 'L', value: 10, unit: 'Ω', min: .5, max: 100, step: .5 },
+  resistor: { name: '电阻', english: 'Resistor', prefix: 'R', value: 10, unit: 'Ω', min: .5, max: 220, step: .5 },
   switch: { name: '开关', english: 'Switch', prefix: 'S', value: 0 },
   spdt: { name:'双掷开关',english:'SPDT switch',prefix:'SP',idPrefix:'d',value:0,note:'单刀双掷 · 公共端 C 接通 1 或 2 · 双击切换' },
   ammeter: { name: '电流表', english: 'Ammeter', prefix: 'A', value: 0 },
   voltmeter: { name: '电压表', english: 'Voltmeter', prefix: 'V', value: 0 },
-  rheostat: { name:'滑动变阻器',english:'Rheostat',prefix:'RV',idPrefix:'t',value:20,unit:'Ω',min:1,max:100,step:1,note:'下方 A、B 两柱，上方 P 滑片 · 一上一下调阻' },
-  motor: { name:'电动机',english:'DC motor',prefix:'M',value:12,unit:'Ω',min:2,max:100,step:1,note:'线圈电阻与反电动势模型 · 启动、转动和停转电流不同' },
-  bell: { name:'电铃',english:'Electric bell',prefix:'B',idPrefix:'z',value:30,unit:'Ω',min:5,max:100,step:1,note:'供电改变敲击频率、振幅与响度' },
-  heater: { name:'电热丝',english:'Heater',prefix:'H',value:20,unit:'Ω',min:1,max:100,step:1,note:'固定电阻模型 · 红热程度随功率变化' },
-  capacitor: { name:'电容',english:'Capacitor',prefix:'C',value:1000,unit:'μF',min:10,max:100000,step:10,note:'模拟充电、储能与放电 · 可慢放观察' },
-  led: { name:'发光二极管',english:'LED',prefix:'LED',idPrefix:'g',value:2,unit:'V',min:1.2,max:3.6,step:.1,note:'正向导通、反向截止 · 建议串联限流电阻' },
-  inductor: { name:'线圈',english:'Inductor',prefix:'Co',idPrefix:'q',value:100,unit:'mH',min:10,max:1000,step:10,note:'稳态直流理想短路 · 不模拟暂态' },
-  fuse: { name:'保险丝',english:'Fuse',prefix:'F',value:1,unit:'A',min:.1,max:5,step:.1,note:'冷态电阻 0.2 Ω · 超过额定电流熔断' }
+  rheostat: { name:'滑动变阻器',english:'Rheostat',prefix:'RV',idPrefix:'t',value:20,unit:'Ω',min:.5,max:200,step:.5,note:'下方 A、B 两柱，上方 P 滑片 · 一上一下调阻' },
+  motor: { name:'电动机',english:'DC motor',prefix:'M',value:12,unit:'Ω',min:1,max:200,step:1,note:'线圈电阻与反电动势模型 · 启动、转动和停转电流不同' },
+  bell: { name:'电铃',english:'Electric bell',prefix:'B',idPrefix:'z',value:30,unit:'Ω',min:1,max:200,step:1,note:'供电改变敲击频率、振幅与响度' },
+  heater: { name:'电热丝',english:'Heater',prefix:'H',value:20,unit:'Ω',min:.5,max:200,step:.5,note:'固定电阻模型 · 红热程度随功率变化' },
+  capacitor: { name:'电容',english:'Capacitor',prefix:'C',value:1000,unit:'μF',min:10,max:220000,step:10,note:'模拟充电、储能与放电 · 可慢放观察' },
+  led: { name:'发光二极管',english:'LED',prefix:'LED',idPrefix:'g',value:2.4,unit:'V',min:1.2,max:4.5,step:.1,note:'正向导通、反向截止 · 建议串联限流电阻' },
+  inductor: { name:'线圈',english:'Inductor',prefix:'Co',idPrefix:'q',value:100,unit:'mH',min:1,max:2200,step:1,note:'稳态直流理想短路 · 不模拟暂态' },
+  fuse: { name:'保险丝',english:'Fuse',prefix:'F',value:1,unit:'A',min:.05,max:10,step:.05,note:'冷态电阻 0.2 Ω · 超过额定电流熔断' }
 };
+export const validComponentValue = (type, value) => Number.isFinite(value) &&
+  (type === 'battery' || !definitions[type]?.unit || (value > 0 && Number.isFinite(1 / value)));
+export const validInternalResistance = value => Number.isFinite(value) && value >= 0 &&
+  (value === 0 || Number.isFinite(1 / value));
+
 export const component = (id, type, x, y, value, angle = 0) => ({ id, type, x, y, value: value ?? definitions[type].value, angle, closed: true, ...(type==='fuse'?{blown:false}:{}), ...(type==='spdt'?{position:1}:{}),...(type==='battery'?{internalResistance:0}:{}),...(type==='rheostat'?{slider:.5}:{}),...(type==='capacitor'?{chargeVoltage:0}:{}),...(type==='motor'?{stalled:false}:{}) });
+
+export function normalizeComponentPreset(type, input) {
+  const preset = {};
+  if (!input || !Object.hasOwn(definitions, type)) return preset;
+  if (definitions[type].unit && validComponentValue(type, input.value)) preset.value = input.value;
+  if (type === 'battery' && validInternalResistance(input.internalResistance)) preset.internalResistance = input.internalResistance;
+  if (type === 'rheostat' && Number.isFinite(input.slider) && input.slider >= 0 && input.slider <= 1) preset.slider = input.slider;
+  if (type === 'switch' && typeof input.closed === 'boolean') preset.closed = input.closed;
+  if (type === 'spdt' && [1, 2].includes(input.position)) preset.position = input.position;
+  return preset;
+}
 export function createPreset(name,records=[]) {
   let components = [], wires = [], junctions = [];
   const w = (a, b, via) => wires.push({ id: `w${wires.length + 1}`, a, b, ...(via ? { via } : {}) });

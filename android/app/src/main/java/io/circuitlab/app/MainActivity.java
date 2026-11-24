@@ -1,5 +1,7 @@
 package io.circuitlab.app;
 
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
@@ -16,6 +18,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CircuitAppearancePlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+            getWindow().setStatusBarContrastEnforced(false);
+        }
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
             .setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {

@@ -20,6 +20,17 @@ async function track(){
   await page.waitForFunction(()=>{const animation=document.querySelector('.wire-flow')?.getAnimations()[0];return animation&&animation.startTime!==null;});
   await page.evaluate(()=>{window.flowReferences=[...document.querySelectorAll('.wire-flow')].map(node=>{const animation=node.getAnimations()[0];return {node,animation,start:animation.startTime,time:animation.currentTime,wire:node.parentElement.dataset.wire};});});
 }
+async function varyParameter(start,count,step){
+  await page.evaluate(async({start,count,step})=>{
+    const began=performance.now();
+    for(let frame=0;frame<60||performance.now()-began<600;frame++){
+      const range=document.getElementById('propertyRange');
+      range.value=String(start+(frame%count)*step);
+      range.dispatchEvent(new Event('input',{bubbles:true}));
+      await new Promise(requestAnimationFrame);
+    }
+  },{start,count,step});
+}
 async function check(label){
   const report=await page.evaluate(()=>window.flowReferences.map(({node,animation,start,time,wire})=>({wire,connected:node.isConnected,sameNode:node===document.querySelector(`[data-wire="${wire}"] .wire-flow`),sameAnimation:node.getAnimations()[0]===animation,startPreserved:animation.startTime===start,elapsed:animation.currentTime-time})));
   assert.ok(report.length>0,label);
@@ -30,10 +41,10 @@ try{
   await page.goto(`http://127.0.0.1:${port}`);await page.waitForSelector('[data-add]',{state:'attached'});
   for(const mode of ['schematic','physical']){
     const circuit=createPreset('ohm');circuit.viewMode=mode;await load(circuit,`持续调节 ${mode}`);await select('e1');await track();
-    await page.evaluate(async()=>{for(let i=0;i<60;i++){const input=document.getElementById('propertyRange');input.value=String(2+(i%20)*.5);input.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(requestAnimationFrame);}});
+    await varyParameter(2,20,.5);
     await check(`${mode}: changing voltage every frame`);
     await select('r1');await track();
-    await page.evaluate(async()=>{for(let i=0;i<60;i++){const input=document.getElementById('propertyRange');input.value=String(5+i%25);input.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(requestAnimationFrame);}});
+    await varyParameter(5,25,1);
     await check(`${mode}: changing resistance/current every frame`);
     const dynamic=createPreset('free');dynamic.viewMode=mode;dynamic.simulationRate=.01;
     dynamic.components=[component('e1','battery',180,350,6),component('r1','resistor',180,150,100),component('c1','capacitor',460,150,100000),component('m1','motor',460,350,12)];

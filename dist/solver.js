@@ -5,10 +5,12 @@
  * singular matrices caused by open circuits and floating components.
  */
 import {terminalIndices,contactIndex} from './terminals.js?v=2.6';
+import {validComponentValue,validInternalResistance} from './models.js?v=2.10.0-beta.5';
 const TYPES = new Set(['battery','resistor','lamp','switch','spdt','ammeter','voltmeter','rheostat','motor','bell','buzzer','heater','capacitor','inductor','fuse','led']);
 const RESISTIVE_TYPES = new Set(['resistor','lamp','rheostat','motor','bell','buzzer','heater']);
 const resistanceOf = (component) => component.type === 'fuse' ? 0.2 : component.value;
 const VOLTAGE_EPSILON = 1e-9;
+const SHORT_SOURCE_RESISTANCE = .5;
 export function motorBackEmf(voltage,resistance){return Math.sign(voltage)*Math.max(0,40/resistance*Math.abs(voltage)-.35)/(40/resistance+.72);}
 
 class UnionFind {
@@ -138,6 +140,51 @@ function solveGraph(vertexCount, edges, injection) {
   return { potential, connected };
 }
 
+function idealSourceConstraints(count,sources,zeroUnion){
+  const adjacency=Array.from({length:count},()=>[]);
+  for(const source of sources){
+    adjacency[source.a].push({node:source.b,difference:-source.emf,source});
+    adjacency[source.b].push({node:source.a,difference:source.emf,source});
+  }
+  const group=new Array(count).fill(-1),offset=new Array(count).fill(0),parent=new Array(count);
+  const shorted=new Set();
+  let groupCount=0;
+  for(let start=0;start<count;start++){
+    if(group[start]!==-1)continue;
+    const queue=[start];
+    group[start]=groupCount;
+    for(const from of queue){
+      for(const {node,difference,source} of adjacency[from]){
+        const expected=offset[from]+difference;
+        if(!Number.isFinite(expected))return {error:'电源参数过大，请使用合理的实验数值。'};
+        if(group[node]===-1){
+          group[node]=groupCount;
+          offset[node]=expected;
+          parent[node]={from,source};
+          queue.push(node);
+        }else if(Math.abs(offset[node]-expected)>VOLTAGE_EPSILON*Math.max(1,Math.abs(offset[node]),Math.abs(expected))){
+          // Remove the shared path to the root to isolate this loop.
+          const ancestors=new Set([from]);
+          for(let edge=parent[from];edge;edge=parent[edge.from])ancestors.add(edge.from);
+          const loop=[source];
+          let common=node;
+          while(!ancestors.has(common)){loop.push(parent[common].source);common=parent[common].from;}
+          for(let end=from;end!==common;end=parent[end].from)loop.push(parent[end].source);
+          const batteries=loop.filter(edge=>edge.emf!==0);
+          const positive=edge=>zeroUnion.find(edge.emf>0?edge.a:edge.b);
+          const negative=edge=>zeroUnion.find(edge.emf>0?edge.b:edge.a);
+          if(batteries.length===2&&positive(batteries[0])===positive(batteries[1])&&negative(batteries[0])===negative(batteries[1])){
+            return {error:'理想电源的电压互相冲突，请检查电池方向与连接。'};
+          }
+          for(const battery of batteries)shorted.add(battery.id);
+        }
+      }
+    }
+    groupCount++;
+  }
+  return {group,offset,groupCount,shorted};
+}
+
 export function solveCircuit(components, wires, junctions = [], transient = null) {
   const invalid = (message = '元件或导线数据不完整，请检查参数。') =>
     emptyResult(components, 'invalid', message, wires);
@@ -148,14 +195,10 @@ export function solveCircuit(components, wires, junctions = [], transient = null
     if (!component || typeof component.id !== 'string' || !component.id ||
       ids.has(component.id) || !TYPES.has(component.type)) return invalid();
     if(component.type==='spdt'&&![1,2].includes(component.position))return invalid('请选择双掷开关的支路 1 或 2。');
-    if(component.type==='battery'&&component.internalResistance!==undefined&&(!Number.isFinite(component.internalResistance)||component.internalResistance<0))return invalid('电源内阻必须是非负有限数值。');
+    if(component.type==='battery'&&component.internalResistance!==undefined&&!validInternalResistance(component.internalResistance))return invalid('电源内阻必须是非负有限数值。');
     if(component.type==='rheostat'&&component.slider!==undefined&&(!Number.isFinite(component.slider)||component.slider<0||component.slider>1))return invalid('滑片位置须在 0%–100% 之间。');
     if ((component.type === 'battery' || RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse','led'].includes(component.type)) &&
-      (typeof component.value !== 'number' || !Number.isFinite(component.value))) return invalid();
-    if ((RESISTIVE_TYPES.has(component.type) || ['capacitor','inductor','fuse','led'].includes(component.type)) &&
-      (!(component.value > 0) || !Number.isFinite(1 / component.value))) {
-      return invalid('电阻值必须是大于零的有限数值。');
-    }
+      !validComponentValue(component.type==='buzzer'?'bell':component.type,component.value)) return invalid();
     ids.add(component.id);
     for(const index of terminalIndices(component.type))terminals.set(`${component.id}:${index}`,terminals.size);
   }
@@ -202,45 +245,25 @@ export function solveCircuit(components, wires, junctions = [], transient = null
     const make=(id,one,two,value=component.value)=>({...component,id,value,terminalA:`${component.id}:${one}`,terminalB:`${component.id}:${two}`,a:terminalNodes[terminals.get(`${component.id}:${one}`)],b:terminalNodes[terminals.get(`${component.id}:${two}`)]});
     return component.type==='rheostat'?[make(component.id,0,1,component.value*(component.slider??1)),make(`${component.id}~right`,1,2,component.value*(1-(component.slider??1)))]:[make(component.id,0,contactIndex(component))];
   });
-  const sources = branches.filter((branch) => (branch.type === 'battery'&&!(branch.internalResistance>0)) || branch.type === 'ammeter')
+  let sources = branches.filter((branch) => (branch.type === 'battery'&&!(branch.internalResistance>0)) || branch.type === 'ammeter')
     .map((branch) => ({ ...branch, emf: branch.type === 'battery' ? branch.value : 0, weight: 1 }));
   const zeroUnion = new UnionFind(count);
   for (const source of sources) if (source.emf === 0) zeroUnion.join(source.a, source.b);
-  for (const source of sources) {
-    if (source.emf !== 0 && zeroUnion.find(source.a) === zeroUnion.find(source.b)) {
-      return emptyResult(components, 'short', '电源被理想导线短路，请断开连接后再实验。', wires);
-    }
+  const directlyShorted=source=>zeroUnion.find(source.a)===zeroUnion.find(source.b);
+  const shorted=new Set(sources.filter(source=>source.emf!==0&&directlyShorted(source)).map(source=>source.id));
+  sources=sources.filter(source=>!shorted.has(source.id));
+  let constraints=idealSourceConstraints(count,sources,zeroUnion);
+  if(constraints.error)return invalid(constraints.error);
+  for(const id of constraints.shorted)shorted.add(id);
+  if(shorted.size){
+    // An ideal voltage source has no finite short-circuit current. Use the
+    // battery model's series resistance for just the batteries in that loop.
+    for(const branch of branches)if(shorted.has(branch.id))branch.internalResistance=SHORT_SOURCE_RESISTANCE;
+    sources=sources.filter(source=>!shorted.has(source.id));
+    constraints=idealSourceConstraints(count,sources,zeroUnion);
+    if(constraints.error)return invalid(constraints.error);
   }
-
-  const adjacency = Array.from({ length: count }, () => []);
-  for (const source of sources) {
-    adjacency[source.a].push({ node: source.b, difference: -source.emf });
-    adjacency[source.b].push({ node: source.a, difference: source.emf });
-  }
-  const group = new Array(count).fill(-1);
-  const offset = new Array(count).fill(0);
-  let groupCount = 0;
-  for (let start = 0; start < count; start++) {
-    if (group[start] !== -1) continue;
-    const queue = [start];
-    group[start] = groupCount;
-    for (let i = 0; i < queue.length; i++) {
-      const from = queue[i];
-      for (const { node, difference } of adjacency[from]) {
-        const expected = offset[from] + difference;
-        if (!Number.isFinite(expected)) return invalid('电源参数过大，请使用合理的实验数值。');
-        if (group[node] === -1) {
-          group[node] = groupCount;
-          offset[node] = expected;
-          queue.push(node);
-        } else if (Math.abs(offset[node] - expected) > VOLTAGE_EPSILON *
-          Math.max(1, Math.abs(offset[node]), Math.abs(expected))) {
-          return invalid('理想电源的电压互相冲突，请检查电池方向与连接。');
-        }
-      }
-    }
-    groupCount++;
-  }
+  const {group,offset,groupCount}=constraints;
 
   try {
     const loads = branches.filter(branch=>(RESISTIVE_TYPES.has(branch.type)&&branch.value>0)||(branch.type==='fuse'&&!branch.blown)||branch.type==='led'||(branch.type==='battery'&&branch.internalResistance>0)||(branch.type==='capacitor'&&transient?.dt>0));
@@ -321,8 +344,9 @@ export function solveCircuit(components, wires, junctions = [], transient = null
       const useRight=!connected(0)&&connected(2),bothFixed=!connected(1)&&connected(0)&&connected(2);
       readings[c.id]={voltage:clean(bothFixed?left.voltage+right.voltage:useRight?-right.voltage:left.voltage),current:clean(useRight?-right.current:left.current),power:clean(left.power+right.power),leftResistance:c.value*(c.slider??1),rightResistance:c.value*(1-(c.slider??1))};delete readings[`${c.id}~right`];
     }
-    const realShort=branches.some(b=>b.type==='battery'&&b.internalResistance>0&&zeroUnion.find(b.a)===zeroUnion.find(b.b)&&Math.abs(b.value)>VOLTAGE_EPSILON);
-    const powered = realShort||outputPower > 1e-12||loads.some(load=>['capacitor','motor'].includes(load.type)&&cleanCurrent(currents.get(load.id)??0)*(models.get(load.id)?.emf??0)<-1e-12);
+    const directShorts=branches.filter(b=>b.type==='battery'&&b.internalResistance>0&&b.value!==0&&directlyShorted(b));
+    const short=shorted.size>0||directShorts.length>0;
+    const powered = short||outputPower > 1e-12||loads.some(load=>['capacitor','motor'].includes(load.type)&&cleanCurrent(currents.get(load.id)??0)*(models.get(load.id)?.emf??0)<-1e-12);
     const wireReadings = Object.create(null);
     for (const edge of wireEdges) {
       if (edge.wireId) {
@@ -337,12 +361,14 @@ export function solveCircuit(components, wires, junctions = [], transient = null
     const packs=batteryPacks(branches,allSources,packGroup,voltage,externalOutflow,readings,zeroUnion);
     const sourceVoltage=packs.length===1?packs[0].voltage:null;
     const sourceMode=!packs.length?'none':packs.length>1?'multiple':sourceVoltage===null?'tapped':'pack';
-    const reportedCurrent=cleanCurrent(realShort?batteries.reduce((sum,b)=>sum+(zeroUnion.find(b.a)===zeroUnion.find(b.b)?Math.abs(currents.get(b.id)??0):0),0):packs.reduce((sum,pack)=>sum+pack.current,0));
-    const resistance=powered&&sourceVoltage!==null&&reportedCurrent>0?sourceVoltage/reportedCurrent:null;
+    const shortCurrent=directShorts.reduce((sum,b)=>sum+Math.abs(currents.get(b.id)??0),0);
+    const loopCurrent=Math.max(0,...[...shorted].map(id=>Math.abs(currents.get(id)??0)));
+    const reportedCurrent=cleanCurrent(Math.max(shortCurrent,loopCurrent,packs.reduce((sum,pack)=>sum+pack.current,0)));
+    const resistance=short?0:powered&&sourceVoltage!==null&&reportedCurrent>0?sourceVoltage/reportedCurrent:null;
     const nodes = Object.create(null);
     for (const [terminal, i] of terminals) nodes[terminal] = clean(voltage[terminalNodes[i]]);
-    return { status: realShort?'short':powered ? 'ok' : 'open',
-      message: realShort?'电源外部短路，电流由内阻限制；请断开短接导线。':powered ? '电路已接通，电压与电流已实时计算。' :
+    return { status: short?'short':powered ? 'ok' : 'open',
+      message: powered ? '电路已接通，电压与电流已实时计算。' :
         batteries.length ? '电路未形成有电流的闭合回路，请连接导线并闭合开关。' : '请加入电源并连接闭合回路。',
       components: readings, current: reportedCurrent, sourceVoltage, sourceMode,
       resistance: resistance === null ? null : clean(resistance), powered, nodes, wires: wireReadings };

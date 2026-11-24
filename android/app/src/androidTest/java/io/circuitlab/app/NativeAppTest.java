@@ -82,6 +82,34 @@ public class NativeAppTest {
     }
 
     @Test
+    public void webViewFillsTheWindowAndControlsRespectVisibleBarsAtCustomScale() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitValue(scenario, "document.querySelectorAll('[data-add]').length", "15");
+            awaitSystemBars(scenario, true);
+            awaitValue(scenario, "JSON.parse(CircuitSystemTheme.safeArea()).filter(value=>value>0).length>=2", "true");
+            scenario.onActivity(activity -> {
+                var decor = activity.getWindow().getDecorView();
+                var webView = activity.getBridge().getWebView();
+                int[] decorPosition = new int[2], webPosition = new int[2];
+                decor.getLocationOnScreen(decorPosition);
+                webView.getLocationOnScreen(webPosition);
+                assertArrayEquals(decorPosition, webPosition);
+                assertEquals(decor.getHeight(), webView.getHeight());
+                assertEquals(decor.getWidth(), webView.getWidth());
+            });
+            evaluate(scenario, "var scale=document.getElementById('uiScaleSetting');scale.value='125';scale.dispatchEvent(new Event('change'));");
+            awaitValue(scenario, "(()=>{const [top,right,bottom,left]=JSON.parse(CircuitSystemTheme.safeArea());" +
+                "const b=document.querySelector('.app-shell').getBoundingClientRect();" +
+                "const h=document.querySelector('.site-header').getBoundingClientRect();" +
+                "const controls=document.getElementById('layoutControls').getBoundingClientRect();" +
+                "return document.documentElement.style.getPropertyValue('--ui-scale')==='1.25'&&" +
+                "h.top>=top-1&&controls.top>=top&&controls.left>=left&&" +
+                "b.right<=innerWidth-right+1&&b.bottom<=innerHeight-bottom+1;})()", "true");
+            evaluate(scenario, "scale.value='100';scale.dispatchEvent(new Event('change'));");
+        }
+    }
+
+    @Test
     public void offlineWorkbenchPersistsAndNativeJsonExportHandlesSaveAndCancel() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitValue(scenario, "document.querySelectorAll('[data-add]').length", "15");

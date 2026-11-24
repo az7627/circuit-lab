@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use tauri::{WebviewWindowBuilder, WebviewUrl, webview::PageLoadEvent};
 use tauri_plugin_dialog::DialogExt;
+mod window_chrome;
 
 #[tauri::command]
 async fn save_experiment(app: tauri::AppHandle, content: String, name: String) -> Result<bool, String> {
@@ -33,7 +34,11 @@ fn system_smoke_report(app: tauri::AppHandle, report: serde_json::Value) -> Resu
 
 fn main() {
     tauri::Builder::default().plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![save_experiment, set_fullscreen, system_smoke_report])
+        .invoke_handler(tauri::generate_handler![
+            save_experiment, set_fullscreen, system_smoke_report,
+            window_chrome::set_title_bar_hidden, window_chrome::desktop_window_state,
+            window_chrome::desktop_window_action
+        ])
         .setup(|app| {
             let smoke=std::env::var_os("CIRCUIT_LAB_SYSTEM_SMOKE_REPORT").is_some();
             let mut builder=WebviewWindowBuilder::new(app,"main",WebviewUrl::App("index.html".into()))

@@ -1,4 +1,5 @@
 import {lampAppearance,heaterAppearance} from './visuals.js?v=2.6';
+import {ledLevel} from './led.js';
 import {bellResponse} from './audio.js?v=2.6';
 export function symbol(c, {thumbnail=false,power=0,current=0,motion=true,time=0}={}) {
   const reading={power,current};
@@ -8,7 +9,7 @@ export function symbol(c, {thumbnail=false,power=0,current=0,motion=true,time=0}
   if(c.type==='spdt'){const upright=thumbnail?0:-(c.angle??0);return `<path d="M-54 0h27M26-24h28M26 24h28M-23 0 23 ${c.position===2?24:-24}"/><circle cx="-25" r="3"/><circle cx="25" cy="-24" r="3"/><circle cx="25" cy="24" r="3"/><text class="switch-port-label" x="-43" y="-12" transform="rotate(${upright} -43 -12)">C</text><text class="switch-port-label" x="42" y="-35" transform="rotate(${upright} 42 -35)">1</text><text class="switch-port-label" x="42" y="39" transform="rotate(${upright} 42 39)">2</text>`;}
   if (c.type === 'resistor') return '<path d="M-54 0h26m56 0h26"/><rect x="-28" y="-13" width="56" height="26" rx="2"/><path d="M-21-6h42" opacity=".16"/>';
   if(c.type==='rheostat') {const slider=thumbnail?0:-28+56*(c.slider??1);return `<path d="M-54 18h11V0h15m56 0h15v18h11"/><rect x="-28" y="-12" width="56" height="24" rx="2"/><path class="rheostat-slider" d="M0-54v18H${slider}v24m-5-8 5 8 5-8"/>`;}
-  if(c.type==='led'){const level=thumbnail?0:Math.min(1,Math.max(0,current)/.02);return `<path d="M-54 0h36m36 0h36"/><path class="led-body" d="M-18-16 13 0-18 16Z" fill="${level?`rgba(255,94,77,${.2+.7*level})`:'var(--diagram-fill, #fdfcff)'}"/><path d="M14-16v32m-9-38 15-13m-7 0h7v7m3 7 15-13m-7 0h7v7"/>${level?`<circle class="led-glow" r="25" fill="#ff6958" stroke="none" opacity="${level*.18}"/>`:''}`;}
+  if(c.type==='led'){const level=thumbnail?0:ledLevel(current);return `<path d="M-54 0h36m36 0h36"/><path class="led-body" d="M-18-16 13 0-18 16Z" fill="${level?`rgba(255,94,77,${level})`:'var(--diagram-fill, #fdfcff)'}"/><path d="M14-16v32m-9-38 15-13m-7 0h7v7m3 7 15-13m-7 0h7v7"/>${level?`<circle class="led-glow" r="${18+20*level}" fill="#ff6958" stroke="none" opacity="${level*.42}"/>`:''}`;}
   if(c.type==='capacitor') return '<path d="M-54 0h46M8 0h46M-8-23v46M8-23v46"/>';
   if(c.type==='inductor') return '<path d="M-54 0h20C-34-25-12-25-12 0C-12-25 10-25 10 0C10-25 32-25 32 0h22"/>';
   if(c.type==='heater'){const h=heaterAppearance(thumbnail?0:power),shape='M-33 0-26-15-13 15 0-15 13 15 26-15 33 0';return `<path d="M-54 0h21m66 0h21"/><path class="heater-glow" d="${shape}" stroke="${h.color}" stroke-width="8" opacity="${h.opacity}"/><path class="heater-coil" d="${shape}" stroke="${h.color}" stroke-width="${h.width}"/><path d="M-23-23q-5-6 0-12m23 12q-5-6 0-12m23 12q-5-6 0-12" stroke="${h.color}" opacity="${h.level*.8}"/>`;}
