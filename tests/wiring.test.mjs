@@ -2,8 +2,19 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {projectOnWire,splitWire,wirePoints} from '../dist/wiring.js';
 import {solveCircuit} from '../dist/solver.js';
+import {wirePath} from '../dist/wire-renderer.js';
 const positions={'e:0':{x:0,y:0},'r:0':{x:120,y:80}};
 const point=key=>positions[key];
+
+test('physical display rounds sampled turns within a small tolerance and keeps endpoints',()=>{
+  const points=[{x:0,y:0},{x:60,y:0},{x:60,y:80}];
+  const physical=wirePath(points,true);
+  const match=/^M0 0L([\d.]+) 0Q60 0 60 ([\d.]+)L60 80$/.exec(physical);
+  assert.ok(match,physical);
+  assert.ok(Math.hypot(60-Number(match[1]),Number(match[2]))/4<=.600001);
+  assert.equal(wirePath(points,false),'M0 0L60 0L60 80');
+  assert.equal(wirePath([{x:0,y:0},{x:15,y:3},{x:30,y:6}],true),'M0 0L15 3L30 6');
+});
 
 test('inserting a node on a routed wire keeps both old bends and projects onto the segment',()=>{
   const wire={id:'w',a:'e:0',b:'r:0',via:[{x:60,y:0},{x:60,y:80}]};

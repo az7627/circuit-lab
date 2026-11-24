@@ -33,6 +33,23 @@
     }
     if(chrome.macos)check(chrome.left.join(',')==='close,minimize,maximize'&&!chrome.right.length,'macOS 红绿灯未放在左侧');
     check(document.querySelector('.site-header[data-tauri-drag-region]'),'顶栏拖动区域未启用');
+    const grips=document.getElementById('windowResizeHandles');
+    if(chrome.windows){
+      check(!grips.hidden&&grips.children.length===8,'触屏缩放触区缺失');
+      const start=await invoke('desktop_window_drag_start',{moving:false});
+      await invoke('desktop_window_drag_apply',{
+        moving:false,x:start.x+30,y:start.y+20,width:start.width-30,height:start.height-20
+      });
+      const resized=await invoke('desktop_window_drag_start',{moving:false});
+      check(resized.x===start.x+30&&resized.y===start.y+20&&
+        resized.width===start.width-30&&resized.height===start.height-20,'窗口左上角缩放未调整边界');
+      await invoke('desktop_window_drag_apply',{
+        moving:true,x:start.x,y:start.y,width:resized.width,height:resized.height
+      });
+      const moved=await invoke('desktop_window_drag_start',{moving:false});
+      check(moved.x===start.x&&moved.y===start.y&&moved.width===resized.width&&
+        moved.height===resized.height,'移动窗口改变了窗口尺寸');
+    }
     const headerToggle=document.getElementById('headerToggle');
     headerToggle.click();
     check(headerToggle.disabled&&!document.body.classList.contains('header-collapsed'),'窗口模式下允许收起顶栏');
@@ -47,6 +64,7 @@
     const fullscreen=document.getElementById('fullscreenButton');
     fullscreen.click();
     await until(()=>fullscreen.getAttribute('aria-pressed')==='true','未进入全屏');
+    check(grips.hidden,'全屏中仍有窗口缩放触区');
     headerToggle.click();
     check(!headerToggle.disabled&&document.body.classList.contains('header-collapsed'),'全屏时不能收起顶栏');
     fullscreen.click();
@@ -54,6 +72,6 @@
     check(headerToggle.disabled&&!document.body.classList.contains('header-collapsed'),'退出全屏后没有恢复顶栏');
     const titleBar=document.getElementById('titleBarSetting');titleBar.checked=false;titleBar.dispatchEvent(new Event('change'));
     await until(async()=>(await invoke('desktop_window_state')).decorated,'原生标题栏未恢复');
-    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',uiScale:1.25,persistence:true,export:true,fullscreen:true,currentFlow:true,titleBar:true}});
+    await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',uiScale:1.25,persistence:true,export:true,fullscreen:true,currentFlow:true,titleBar:true,windowGestures:chrome.windows}});
   }catch(error){await invoke('system_smoke_report',{report:{error:error.stack||String(error)}});}
 })();

@@ -37,12 +37,14 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             save_experiment, set_fullscreen, system_smoke_report,
             window_chrome::set_title_bar_hidden, window_chrome::desktop_window_state,
-            window_chrome::desktop_window_action
+            window_chrome::desktop_window_action, window_chrome::desktop_window_drag_start,
+            window_chrome::desktop_window_drag_apply
         ])
         .setup(|app| {
             let smoke=std::env::var_os("CIRCUIT_LAB_SYSTEM_SMOKE_REPORT").is_some();
             let mut builder=WebviewWindowBuilder::new(app,"main",WebviewUrl::App("index.html".into()))
-                .title("电路实验室").inner_size(1440.0,940.0).min_inner_size(360.0,600.0).disable_drag_drop_handler()
+                .title("电路实验室").inner_size(1440.0,940.0)
+                .min_inner_size(window_chrome::MIN_WIDTH,window_chrome::MIN_HEIGHT).disable_drag_drop_handler()
                 .visible(false).incognito(smoke)
                 .on_navigation(|url| matches!(url.scheme(),"tauri"|"about") || url.host_str().is_some_and(|host|host=="tauri.localhost"||host=="localhost"))
                 .on_page_load(move |window,payload| {

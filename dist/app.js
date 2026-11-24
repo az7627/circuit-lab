@@ -1,1 +1,1 @@
-import './workbench.js?v=2.10.0-beta.5';
+import './workbench.js?v=2.10.0-beta.6';

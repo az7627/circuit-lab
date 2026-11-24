@@ -324,13 +324,14 @@ dependencies = [
 
 [[package]]
 name = "circuit-lab-systemwebview"
-version = "2.10.0-beta.5"
+version = "2.10.0-beta.6"
 dependencies = [
  "gtk",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

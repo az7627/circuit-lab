@@ -25,13 +25,21 @@ const select=async id=>{await page.locator(`[data-component="${id}"]`).focus();a
 try{
   await mkdir('artifacts/ui-preferences',{recursive:true});
   for(const viewport of [{width:1600,height:1000},{width:420,height:900}]){
-    const context=await browser.newContext({viewport,colorScheme:'dark',hasTouch:true});page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack));
+    const deviceScaleFactor=viewport.width>900?1.25:1.5;
+    const context=await browser.newContext({viewport,deviceScaleFactor,colorScheme:'dark',hasTouch:true});page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack));
     await page.goto(`http://127.0.0.1:${port}`);await page.waitForSelector('[data-add]',{state:'attached'});
     const tiny=createPreset('free');tiny.components=[component('e1','battery',180,350,3),component('r1','resistor',180,150,100),{...component('c1','capacitor',450,150,100000),chargeVoltage:2.99997},component('a1','ammeter',450,350),component('v1','voltmeter',315,230)];
     tiny.wires=[['e1:0','r1:0'],['r1:1','c1:0'],['c1:1','a1:0'],['a1:1','e1:1'],['r1:0','v1:0'],['r1:1','v1:1']].map(([a,b],i)=>({id:`w${i}`,a,b}));
     const raw=new CircuitSimulation().read(tiny.components,tiny.wires);assert.ok(Math.abs(raw.components.a1.current)>1e-9&&Math.abs(raw.components.a1.current)<1e-6);
     for(const mode of ['schematic','physical']){
       tiny.viewMode=mode;await load(tiny,`微小读数 ${mode}`);
+      const paths=await page.locator('.wire-base').evaluateAll(values=>values.map(path=>({
+        curve:path.getAttribute('d').includes('Q'),
+        hint:getComputedStyle(path).shapeRendering,
+        shared:[...path.parentNode.querySelectorAll('path')].every(layer=>layer.getAttribute('d')===path.getAttribute('d'))
+      })));
+      assert.ok(paths.length&&paths.every(path=>path.hint.toLowerCase()==='geometricprecision'&&path.shared),JSON.stringify(paths));
+      assert.equal(paths.some(path=>path.curve),mode==='physical');
       assert.equal(await page.locator('[data-component="a1"] .component-value').textContent(),'0.00 A');assert.equal(await page.locator('[data-component="v1"] .component-value').textContent(),'0.00 V');assert.equal(await page.locator('.wire-flow').count(),0);
       await select('a1');assert.equal(await page.locator('#selectedCurrent').textContent(),'0.00 A');await select('v1');assert.equal(await page.locator('#selectedVoltage').textContent(),'0.00 V');
     }

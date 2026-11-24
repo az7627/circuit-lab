@@ -16,7 +16,8 @@ import {zoomView,startPinch,movePinch} from './camera.js';
 import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
-import {renderWireLayer} from './wire-renderer.js';
+import {renderWireLayer,wirePath} from './wire-renderer.js?v=2.10.0-beta.6';
+import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.6';
 import {displayReadings} from './readings.js';
 import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
 
@@ -157,7 +158,7 @@ function renderBoard(){
   const focused=document.activeElement,selector=focused?.dataset.terminal?`[data-terminal="${focused.dataset.terminal}"]`:focused?.dataset.component?`[data-component="${focused.dataset.component}"]`:focused?.dataset.wire?`[data-wire="${focused.dataset.wire}"]`:null;
   const defs='<defs><radialGradient id="lampGlow"><stop offset="0" stop-color="#ffd477" stop-opacity=".9"/><stop offset=".55" stop-color="#ffde9b" stop-opacity=".3"/><stop offset="1" stop-color="#ffe69b" stop-opacity="0"/></radialGradient></defs>';
   const components=state.components.map(c=>{const d=definitions[c.type],reading=solution.components[c.id],box=physical?physicalHitBounds(c):componentHitBounds(c),l=physical?physicalLabelOffset(c):labelOffset(c),detail=c.type==='fuse'&&c.blown?'已熔断':d.unit?`${c.value} ${d.unit}`:c.type==='switch'?(c.closed?'闭合':'断开'):c.type==='spdt'?`接通支路 ${c.position}`:`${fixed(reading?.[c.type==='ammeter'?'current':'voltage']??0)} ${c.type==='ammeter'?'A':'V'}`,appearance={power:Math.abs(reading?.power??0),current:reading?.current??0,voltage:reading?.voltage??0,motion:store.data.settings.motion,time:performance.now()/1000,range:isMeter(c.type)?meterConnection(c,state.wires).range:undefined};return `<g class="component-group ${selected===c.id?'selected':''}" data-component="${c.id}" role="button" tabindex="0" aria-label="${d.name} ${label(c)}，${detail}"><rect class="component-hit" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="transparent"/><rect class="component-outline" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="8"/><g class="${physical?'physical-symbol':'component-symbol'}" transform="translate(${c.x} ${c.y}) rotate(${c.angle})${physical&&c.physicalFlip?' scale(-1 1)':''}">${physical?physicalSymbol(c,appearance):symbol(c,appearance)}</g>${c.type==='motor'?fan(c,reading)+(physical?'':`<text class="motor-letter" x="${c.x}" y="${c.y+8}">M</text>`):''}${!physical&&['ammeter','voltmeter'].includes(c.type)?`<text class="meter-letter" x="${c.x}" y="${c.y+8}">${c.type==='ammeter'?'A':'V'}</text>`:''}<text class="component-name" x="${c.x+l.x+(physical?-24:0)}" y="${c.y+l.y}">${label(c)}</text><text class="component-value" x="${c.x+l.x+(physical?15:0)}" y="${c.y+l.y+(physical?0:18)}">${detail}</text></g>`;}).join('');
-  const wires=state.wires.map((w,index)=>{const points=wirePoints(w,terminalPoint,state.viewMode),path=points.map((p,i)=>`${i?'L':'M'}${p.x} ${p.y}`).join(' '),current=solution.wires[w.id]??0,hits=points.slice(1).map((p,i)=>{const a=points[i];return `<rect class="wire-segment-hit" width="${Math.hypot(p.x-a.x,p.y-a.y)}" height="14" y="-7" transform="translate(${a.x} ${a.y}) rotate(${Math.atan2(p.y-a.y,p.x-a.x)*180/Math.PI})"/>`;}).join(''),color=['#ce6b59','#597da9','#659185','#b68b51'][index%4];return `<g data-wire="${w.id}" role="button" tabindex="0" aria-label="导线 ${w.id}" style="--wire-color:${color}">${hits}${physical?`<path class="physical-wire-shadow" d="${path}"/>`:''}<path class="wire-base ${selected===w.id?'selected':''}" d="${path}"/>${physical?`<path class="physical-wire-highlight" d="${path}"/>`:''}<path class="wire-hit" d="${path}"/>${state.showCurrent&&Math.abs(current)>1e-8?`<path class="wire-flow ${current<0?'reverse':''}" d="${path}"/>`:''}</g>`;}).join('');
+  const wires=state.wires.map((w,index)=>{const points=wirePoints(w,terminalPoint,state.viewMode),path=wirePath(points,physical),current=solution.wires[w.id]??0,hits=points.slice(1).map((p,i)=>{const a=points[i];return `<rect class="wire-segment-hit" width="${Math.hypot(p.x-a.x,p.y-a.y)}" height="14" y="-7" transform="translate(${a.x} ${a.y}) rotate(${Math.atan2(p.y-a.y,p.x-a.x)*180/Math.PI})"/>`;}).join(''),color=['#ce6b59','#597da9','#659185','#b68b51'][index%4];return `<g data-wire="${w.id}" role="button" tabindex="0" aria-label="导线 ${w.id}" style="--wire-color:${color}">${hits}${physical?`<path class="physical-wire-shadow" d="${path}"/>`:''}<path class="wire-base ${selected===w.id?'selected':''}" d="${path}"/>${physical?`<path class="physical-wire-highlight" d="${path}"/>`:''}<path class="wire-hit" d="${path}"/>${state.showCurrent&&Math.abs(current)>1e-8?`<path class="wire-flow ${current<0?'reverse':''}" d="${path}"/>`:''}</g>`;}).join('');
   const connectedPorts=new Set(state.wires.flatMap(w=>[w.a,w.b]));
   const terminals=state.components.map(c=>visibleTerminals(c,state.wires,state.viewMode).map(i=>{const key=`${c.id}:${i}`,p=terminalPoint(key);return `<g class="terminal-group ${connectedPorts.has(key)?'connected':''} ${selected===c.id?'owner-selected':''}" data-terminal="${key}" data-owner-component="${c.id}" role="button" tabindex="0" aria-label="${label(c)} ${terminalLabel(c,i,state.wires,state.viewMode)}"><circle class="terminal-hit" cx="${p.x}" cy="${p.y}" r="12"/><circle class="terminal ${pendingTerminal===key?'pending':''}" cx="${p.x}" cy="${p.y}" r="4.5"/>${isMeter(c.type)&&!physical?`<text class="battery-polarity" x="${p.x+(c.angle%180===90?10:0)}" y="${p.y-10}" text-anchor="middle">${i===1?'−':'+'}</text>`:''}</g>`;}).join('')).join('');
   const dots=physical?'':schematicJunctionDots(state,terminalPoint).map(p=>`<circle class="connection-dot" cx="${p.x}" cy="${p.y}" r="3.5"/>`).join('');
@@ -173,7 +174,7 @@ function renderBoard(){
   for(const id of rotors.keys())if(getComponent(id)?.type!=='motor')rotors.delete(id);startFanFrames();
   updateViewport();renderPreview();if(selector)$('board').querySelector(selector)?.focus({preventScroll:true});
 }
-function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?[p,...pendingTrace,lastPointer].map((v,i)=>`${i?'L':'M'}${v.x} ${v.y}`).join(' '):`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
+function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?wirePath([p,...pendingTrace,lastPointer],true):`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
 function renderReadings(){renderPhysics();const reading=solution.components[selected];if($('selectedVoltage'))$('selectedVoltage').textContent=fixed(getJunction(selected)?solution.nodes[`${selected}:0`]:reading?.voltage??0)+' V';if($('selectedCurrent'))$('selectedCurrent').textContent=fixed(reading?.current??0)+' A';if($('selectedPower'))$('selectedPower').textContent=fixed(Math.abs(reading?.power??0))+' W';}
 function updatePropertiesTitle(){
   const c=getComponent(selected),n=getJunction(selected),w=getWire(selected);
@@ -374,12 +375,20 @@ function renderFullscreen(){
   if(desktop)renderDesktopChrome();
   requestAnimationFrame(fitHeader);
 }
-let desktopState={left:[],right:[],macos:false,maximized:false};
+let desktopState={left:[],right:[],macos:false,windows:false,maximized:false};
+let windowGesturesBound=false;
 function renderDesktopChrome(){
   const merged=desktopTitleBarHidden&&!isFullscreen();
   document.body.classList.toggle('desktop-frameless',desktopTitleBarHidden);
   const header=document.querySelector('.site-header');
-  for(const area of [header,header.querySelector('.window-drag-area')]){
+  const caption=header.querySelector('.window-drag-area'),handles=$('windowResizeHandles');
+  document.body.classList.toggle('windows-frameless',merged&&desktopState.windows);
+  handles.hidden=!merged||!desktopState.windows||desktopState.maximized;
+  if(merged&&desktopState.windows&&!windowGesturesBound){
+    bindWindowGestures(caption,handles,(command,args)=>desktop.invoke(command,args));
+    windowGesturesBound=true;
+  }
+  for(const area of [header,caption]){
     if(merged)area.setAttribute('data-tauri-drag-region','deep');
     else area.removeAttribute('data-tauri-drag-region');
   }
