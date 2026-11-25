@@ -2,18 +2,40 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {projectOnWire,splitWire,wirePoints} from '../dist/wiring.js';
 import {solveCircuit} from '../dist/solver.js';
-import {wirePath} from '../dist/wire-renderer.js';
+import {physicalWireCurve,straightWire} from '../dist/cable-curve.js';
+import {idealWireX,rippledWirePoints} from './fixtures/wire-ripple.mjs';
 const positions={'e:0':{x:0,y:0},'r:0':{x:120,y:80}};
 const point=key=>positions[key];
 
-test('physical display rounds sampled turns within a small tolerance and keeps endpoints',()=>{
-  const points=[{x:0,y:0},{x:60,y:0},{x:60,y:80}];
-  const physical=wirePath(points,true);
-  const match=/^M0 0L([\d.]+) 0Q60 0 60 ([\d.]+)L60 80$/.exec(physical);
-  assert.ok(match,physical);
-  assert.ok(Math.hypot(60-Number(match[1]),Number(match[2]))/4<=.600001);
-  assert.equal(wirePath(points,false),'M0 0L60 0L60 80');
-  assert.equal(wirePath([{x:0,y:0},{x:15,y:3},{x:30,y:6}],true),'M0 0L15 3L30 6');
+test('physical cable fitting removes small centerline ripples already present in saved points',()=>{
+  const raw=rippledWirePoints(),saved=structuredClone(raw),fitted=physicalWireCurve(raw);
+  const rms=errors=>Math.hypot(...errors)/Math.sqrt(errors.length);
+  function deviations(points){
+    return Array.from({length:97},(_,i)=>{
+      const y=192+i,index=points.findIndex(point=>point.y>=y),a=points[index-1],b=points[index];
+      return a.x+(b.x-a.x)*(y-a.y)/(b.y-a.y)-idealWireX(y);
+    });
+  }
+  const ripple=errors=>rms(errors.slice(1,-1).map((value,i)=>value-(errors[i]+errors[i+2])/2));
+  const before=deviations(raw),after=deviations(fitted.points);
+  assert.ok(ripple(after)<ripple(before)*.15);
+  assert.ok(rms(after)<rms(before));
+  assert.deepEqual(fitted.points[0],raw[0]);assert.deepEqual(fitted.points.at(-1),raw.at(-1));
+  assert.match(fitted.path,/C/);
+  assert.deepEqual(raw,saved);
+});
+
+test('cable fitting retains a deliberate right angle and the displayed geometry can be split',()=>{
+  const corner=[{x:0,y:0},{x:60,y:0},{x:60,y:80}];
+  assert.equal(physicalWireCurve(corner).path,straightWire(corner));
+  const points=rippledWirePoints(),wire={id:'w1',a:'n1:0',b:'n2:0',physicalVia:points.slice(1,-1)};
+  const terminals={'n1:0':points[0],'n2:0':points.at(-1)};
+  const display=()=>physicalWireCurve(points).points;
+  const target=display().find(p=>p.y>230);
+  const result=splitWire(wire,target,key=>terminals[key],'n3:0','w2','physical',display);
+  assert.deepEqual(result.point,target);
+  assert.equal(result.wires[0].b,'n3:0');
+  assert.equal(result.wires[1].a,'n3:0');
 });
 
 test('inserting a node on a routed wire keeps both old bends and projects onto the segment',()=>{

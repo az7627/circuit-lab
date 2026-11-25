@@ -5,8 +5,8 @@ export function wirePoints(wire, terminalPoint, mode='schematic') {
   const via=(mode==='physical'?wire.physicalVia:undefined) ?? wire.via ?? (Math.abs(a.y-b.y)<1e-7 || Math.abs(a.x-b.x)<1e-7 ? [] : [{x:(a.x+b.x)/2,y:a.y},{x:(a.x+b.x)/2,y:b.y}]);
   return [a,...via,b].filter((p,i,points)=>!i || !same(p,points[i-1]));
 }
-export function projectOnWire(wire, point, terminalPoint, mode='schematic') {
-  const points=wirePoints(wire,terminalPoint,mode);
+export function projectOnWire(wire, point, terminalPoint, mode='schematic', route=wirePoints) {
+  const points=route(wire,terminalPoint,mode);
   let best=null;
   for(let i=0;i<points.length-1;i++) {
     const a=points[i], b=points[i+1], dx=b.x-a.x, dy=b.y-a.y, length=dx*dx+dy*dy;
@@ -17,15 +17,15 @@ export function projectOnWire(wire, point, terminalPoint, mode='schematic') {
   return best;
 }
 /** Snap only an intentional wire endpoint; a passing crossing stays insulated. */
-export function nearestConnection(wires,keys,point,terminalPoint,mode='schematic',tolerance=10){
+export function nearestConnection(wires,keys,point,terminalPoint,mode='schematic',tolerance=10,route=wirePoints){
   let terminal=null;
   for(const key of keys){const p=terminalPoint(key),distance=Math.hypot(point.x-p.x,point.y-p.y);if(distance<=tolerance&&(!terminal||distance<terminal.distance))terminal={terminal:key,point:p,distance};}
   if(terminal)return terminal;
-  let best=null;for(const wire of wires){const hit=projectOnWire(wire,point,terminalPoint,mode);if(hit&&hit.distance<=tolerance&&(!best||hit.distance<best.distance))best={wire:wire.id,...hit};}
+  let best=null;for(const wire of wires){const hit=projectOnWire(wire,point,terminalPoint,mode,route);if(hit&&hit.distance<=tolerance&&(!best||hit.distance<best.distance))best={wire:wire.id,...hit};}
   return best;
 }
-export function splitWire(wire, point, terminalPoint, junctionTerminal, secondId, mode='schematic') {
-  const hit=projectOnWire(wire,point,terminalPoint,mode);
+export function splitWire(wire, point, terminalPoint, junctionTerminal, secondId, mode='schematic', displayRoute=wirePoints) {
+  const hit=projectOnWire(wire,point,terminalPoint,mode,displayRoute);
   if(!hit || same(hit.point,hit.points[0]) || same(hit.point,hit.points.at(-1))) return null;
   const first={...wire,b:junctionTerminal},second={...wire,id:secondId,a:junctionTerminal};
   for(const route of ['schematic','physical']) {
@@ -34,8 +34,11 @@ export function splitWire(wire, point, terminalPoint, junctionTerminal, secondId
     const before=[...projection.points.slice(0,projection.segment+1),projection.point];
     const after=[projection.point,...projection.points.slice(projection.segment+1)];
     const key=route==='physical'?'physicalVia':'via';
+    const limit=route==='physical'?2048:100;
     first[key]=before.slice(1).filter((p,i,all)=>(!i||!same(p,all[i-1]))&&!same(p,hit.point));
     second[key]=after.slice(0,-1).filter((p,i,all)=>(!i||!same(p,all[i-1]))&&!same(p,hit.point));
+    if(first[key].length>limit)first[key]=simplifyTrace([before[0],...first[key],hit.point],.035,limit+2).slice(1,-1);
+    if(second[key].length>limit)second[key]=simplifyTrace([hit.point,...second[key],after.at(-1)],.035,limit+2).slice(1,-1);
   }
   return {point:hit.point,wires:[first,second]};
 }

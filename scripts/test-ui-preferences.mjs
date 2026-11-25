@@ -34,12 +34,12 @@ try{
     for(const mode of ['schematic','physical']){
       tiny.viewMode=mode;await load(tiny,`微小读数 ${mode}`);
       const paths=await page.locator('.wire-base').evaluateAll(values=>values.map(path=>({
-        curve:path.getAttribute('d').includes('Q'),
+        curve:/[CQ]/.test(path.getAttribute('d')),
         hint:getComputedStyle(path).shapeRendering,
         shared:[...path.parentNode.querySelectorAll('path')].every(layer=>layer.getAttribute('d')===path.getAttribute('d'))
       })));
       assert.ok(paths.length&&paths.every(path=>path.hint.toLowerCase()==='geometricprecision'&&path.shared),JSON.stringify(paths));
-      assert.equal(paths.some(path=>path.curve),mode==='physical');
+      if(mode==='schematic')assert.ok(paths.every(path=>!path.curve));
       assert.equal(await page.locator('[data-component="a1"] .component-value').textContent(),'0.00 A');assert.equal(await page.locator('[data-component="v1"] .component-value').textContent(),'0.00 V');assert.equal(await page.locator('.wire-flow').count(),0);
       await select('a1');assert.equal(await page.locator('#selectedCurrent').textContent(),'0.00 A');await select('v1');assert.equal(await page.locator('#selectedVoltage').textContent(),'0.00 V');
     }

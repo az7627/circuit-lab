@@ -1,11 +1,11 @@
-import {convertView,routeCircuit,moveItem} from './layout.js?v=2.7';
+import {convertView,routeCircuit,moveItem,physicalRouteCost} from './layout.js?v=wire-curve-1';
 import {isMeter,meterConnection,meterScale,visibleTerminals,terminalLabel} from './meters.js?v=2.6';
 import {definitions,component,createPreset,validComponentValue,validInternalResistance} from './models.js?v=2.10.0-beta.5';
 import {symbol,thumbnail} from './symbols.js?v=2.10.0-beta.5';
 import {physicalSymbol,physicalThumbnail,physicalHitBounds,physicalLabelOffset,physicalBounds} from './physical.js?v=2.10.0-beta.5';
 import {icons,icon} from './icons.js?v=2.10.0-beta.5';
 import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera} from './visuals.js?v=2.6';
-import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute,nearestConnection} from './wiring.js?v=2.6';
+import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute,nearestConnection} from './wiring.js?v=wire-curve-1';
 import {clone,normalizeState,pruneLayoutCaches} from './data.js?v=2.10.0-beta.5';
 import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.10.0-beta.5';
 import {BellAudio} from './audio.js?v=2.6';
@@ -16,7 +16,8 @@ import {zoomView,startPinch,movePinch} from './camera.js';
 import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
-import {renderWireLayer,wirePath} from './wire-renderer.js?v=2.10.0-beta.6';
+import {renderWireLayer} from './wire-renderer.js?v=wire-curve-1';
+import {physicalWireCurve,straightWire} from './cable-curve.js?v=wire-curve-1';
 import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.6';
 import {displayReadings} from './readings.js';
 import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
@@ -153,12 +154,47 @@ function fan(c,reading){const level=Math.min(1,Math.abs(reading?.backEmf??0)/6),
 function animateFans(time){fanFrame=null;let moving=false;for(const el of $('board').querySelectorAll('.motor-fan.active')){const rotor=rotors.get(el.dataset.motorId);if(rotor){el.setAttribute('transform',`rotate(${rotor.advance(time)})`);moving=true;}}if(moving&&!document.hidden)fanFrame=requestAnimationFrame(animateFans);}
 function startFanFrames(){if(activeId&&fanFrame===null&&!document.hidden&&$('board').querySelector('.motor-fan.active'))fanFrame=requestAnimationFrame(animateFans);}
 function stopFanFrames(){if(fanFrame!==null)cancelAnimationFrame(fanFrame);fanFrame=null;}
+const cableDisplay=new Map();
+let cableObstacleKey='',cableObstacleCost;
+
+function prepareCableDisplay(){
+  const key=JSON.stringify(state.components.map(c=>[c.id,c.type,c.x,c.y,c.angle,c.physicalFlip]));
+  if(key!==cableObstacleKey){
+    cableObstacleKey=key;
+    cableObstacleCost=physicalRouteCost(state);
+  }
+  const wires=new Set(state.wires.map(w=>w.id));
+  for(const id of cableDisplay.keys())if(!wires.has(id))cableDisplay.delete(id);
+}
+
+function displayedCable(wire,source){
+  let cached=cableDisplay.get(wire.id);
+  if(!cached||source.length!==cached.source.length||
+    source.some((point,i)=>point.x!==cached.source[i].x||point.y!==cached.source[i].y)){
+    const points=source.map(({x,y})=>({x,y}));
+    cached={source:points,fit:physicalWireCurve(points)};
+    cableDisplay.set(wire.id,cached);
+  }
+  if(cached.obstacles!==cableObstacleKey||cached.a!==wire.a||cached.b!==wire.b){
+    const fitCost=cached.fit.points===cached.source?0:cableObstacleCost(cached.fit.points,wire);
+    cached.display=fitCost<=1e-6||fitCost<=cableObstacleCost(cached.source,wire)
+      ?cached.fit:{points:cached.source,path:straightWire(cached.source)};
+    Object.assign(cached,{obstacles:cableObstacleKey,a:wire.a,b:wire.b});
+  }
+  return cached.display;
+}
+
+function displayedWirePoints(wire,terminal,mode){
+  return (mode==='physical'&&cableDisplay.get(wire.id)?.display.points)||wirePoints(wire,terminal,mode);
+}
+
 function renderBoard(){
   const physical=state.viewMode==='physical';
+  if(physical)prepareCableDisplay();
   const focused=document.activeElement,selector=focused?.dataset.terminal?`[data-terminal="${focused.dataset.terminal}"]`:focused?.dataset.component?`[data-component="${focused.dataset.component}"]`:focused?.dataset.wire?`[data-wire="${focused.dataset.wire}"]`:null;
   const defs='<defs><radialGradient id="lampGlow"><stop offset="0" stop-color="#ffd477" stop-opacity=".9"/><stop offset=".55" stop-color="#ffde9b" stop-opacity=".3"/><stop offset="1" stop-color="#ffe69b" stop-opacity="0"/></radialGradient></defs>';
   const components=state.components.map(c=>{const d=definitions[c.type],reading=solution.components[c.id],box=physical?physicalHitBounds(c):componentHitBounds(c),l=physical?physicalLabelOffset(c):labelOffset(c),detail=c.type==='fuse'&&c.blown?'已熔断':d.unit?`${c.value} ${d.unit}`:c.type==='switch'?(c.closed?'闭合':'断开'):c.type==='spdt'?`接通支路 ${c.position}`:`${fixed(reading?.[c.type==='ammeter'?'current':'voltage']??0)} ${c.type==='ammeter'?'A':'V'}`,appearance={power:Math.abs(reading?.power??0),current:reading?.current??0,voltage:reading?.voltage??0,motion:store.data.settings.motion,time:performance.now()/1000,range:isMeter(c.type)?meterConnection(c,state.wires).range:undefined};return `<g class="component-group ${selected===c.id?'selected':''}" data-component="${c.id}" role="button" tabindex="0" aria-label="${d.name} ${label(c)}，${detail}"><rect class="component-hit" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="transparent"/><rect class="component-outline" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="8"/><g class="${physical?'physical-symbol':'component-symbol'}" transform="translate(${c.x} ${c.y}) rotate(${c.angle})${physical&&c.physicalFlip?' scale(-1 1)':''}">${physical?physicalSymbol(c,appearance):symbol(c,appearance)}</g>${c.type==='motor'?fan(c,reading)+(physical?'':`<text class="motor-letter" x="${c.x}" y="${c.y+8}">M</text>`):''}${!physical&&['ammeter','voltmeter'].includes(c.type)?`<text class="meter-letter" x="${c.x}" y="${c.y+8}">${c.type==='ammeter'?'A':'V'}</text>`:''}<text class="component-name" x="${c.x+l.x+(physical?-24:0)}" y="${c.y+l.y}">${label(c)}</text><text class="component-value" x="${c.x+l.x+(physical?15:0)}" y="${c.y+l.y+(physical?0:18)}">${detail}</text></g>`;}).join('');
-  const wires=state.wires.map((w,index)=>{const points=wirePoints(w,terminalPoint,state.viewMode),path=wirePath(points,physical),current=solution.wires[w.id]??0,hits=points.slice(1).map((p,i)=>{const a=points[i];return `<rect class="wire-segment-hit" width="${Math.hypot(p.x-a.x,p.y-a.y)}" height="14" y="-7" transform="translate(${a.x} ${a.y}) rotate(${Math.atan2(p.y-a.y,p.x-a.x)*180/Math.PI})"/>`;}).join(''),color=['#ce6b59','#597da9','#659185','#b68b51'][index%4];return `<g data-wire="${w.id}" role="button" tabindex="0" aria-label="导线 ${w.id}" style="--wire-color:${color}">${hits}${physical?`<path class="physical-wire-shadow" d="${path}"/>`:''}<path class="wire-base ${selected===w.id?'selected':''}" d="${path}"/>${physical?`<path class="physical-wire-highlight" d="${path}"/>`:''}<path class="wire-hit" d="${path}"/>${state.showCurrent&&Math.abs(current)>1e-8?`<path class="wire-flow ${current<0?'reverse':''}" d="${path}"/>`:''}</g>`;}).join('');
+  const wires=state.wires.map((w,index)=>{const points=wirePoints(w,terminalPoint,state.viewMode),path=physical?displayedCable(w,points).path:straightWire(points),current=solution.wires[w.id]??0,hits=physical?'':points.slice(1).map((p,i)=>{const a=points[i];return `<rect class="wire-segment-hit" width="${Math.hypot(p.x-a.x,p.y-a.y)}" height="14" y="-7" transform="translate(${a.x} ${a.y}) rotate(${Math.atan2(p.y-a.y,p.x-a.x)*180/Math.PI})"/>`;}).join(''),color=['#ce6b59','#597da9','#659185','#b68b51'][index%4];return `<g data-wire="${w.id}" role="button" tabindex="0" aria-label="导线 ${w.id}" style="--wire-color:${color}">${hits}${physical?`<path class="physical-wire-shadow" d="${path}"/>`:''}<path class="wire-base ${selected===w.id?'selected':''}" d="${path}"/>${physical?`<path class="physical-wire-highlight" d="${path}"/>`:''}<path class="wire-hit" d="${path}"/>${state.showCurrent&&Math.abs(current)>1e-8?`<path class="wire-flow ${current<0?'reverse':''}" d="${path}"/>`:''}</g>`;}).join('');
   const connectedPorts=new Set(state.wires.flatMap(w=>[w.a,w.b]));
   const terminals=state.components.map(c=>visibleTerminals(c,state.wires,state.viewMode).map(i=>{const key=`${c.id}:${i}`,p=terminalPoint(key);return `<g class="terminal-group ${connectedPorts.has(key)?'connected':''} ${selected===c.id?'owner-selected':''}" data-terminal="${key}" data-owner-component="${c.id}" role="button" tabindex="0" aria-label="${label(c)} ${terminalLabel(c,i,state.wires,state.viewMode)}"><circle class="terminal-hit" cx="${p.x}" cy="${p.y}" r="12"/><circle class="terminal ${pendingTerminal===key?'pending':''}" cx="${p.x}" cy="${p.y}" r="4.5"/>${isMeter(c.type)&&!physical?`<text class="battery-polarity" x="${p.x+(c.angle%180===90?10:0)}" y="${p.y-10}" text-anchor="middle">${i===1?'−':'+'}</text>`:''}</g>`;}).join('')).join('');
   const dots=physical?'':schematicJunctionDots(state,terminalPoint).map(p=>`<circle class="connection-dot" cx="${p.x}" cy="${p.y}" r="3.5"/>`).join('');
@@ -174,7 +210,7 @@ function renderBoard(){
   for(const id of rotors.keys())if(getComponent(id)?.type!=='motor')rotors.delete(id);startFanFrames();
   updateViewport();renderPreview();if(selector)$('board').querySelector(selector)?.focus({preventScroll:true});
 }
-function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?wirePath([p,...pendingTrace,lastPointer],true):`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
+function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?physicalWireCurve(simplifyTrace([p,...pendingTrace,lastPointer],.2,256)).path:`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
 function renderReadings(){renderPhysics();const reading=solution.components[selected];if($('selectedVoltage'))$('selectedVoltage').textContent=fixed(getJunction(selected)?solution.nodes[`${selected}:0`]:reading?.voltage??0)+' V';if($('selectedCurrent'))$('selectedCurrent').textContent=fixed(reading?.current??0)+' A';if($('selectedPower'))$('selectedPower').textContent=fixed(Math.abs(reading?.power??0))+' W';}
 function updatePropertiesTitle(){
   const c=getComponent(selected),n=getJunction(selected),w=getWire(selected);
@@ -284,13 +320,13 @@ function makeWire(source,target){const wire={id:nextWire(),a:source,b:target};if
 function connectTerminal(key){if(!pendingTerminal){beginWire(key);return;}if(pendingTerminal===key){cancelWire();renderBoard();return;}if(state.wires.some(w=>(w.a===pendingTerminal&&w.b===key)||(w.b===pendingTerminal&&w.a===key))){cancelWire();renderBoard();toast('这两个接线端已经连接');return;}if(state.wires.length>=1000){toast('导线较多，请保存并整理当前实验。');return;}pushHistory();state.wires.push(makeWire(pendingTerminal,key));cancelWire();state.preset='free';update();}
 function placeJunction(point,wireId=null){
   const scale=viewportGeometry(camera,zoom,$('boardWrap').getBoundingClientRect()).scale;
-  if(!wireId){const keys=[...state.components.flatMap(c=>visibleTerminals(c,state.wires,state.viewMode).map(i=>`${c.id}:${i}`)),...state.junctions.map(n=>`${n.id}:0`)],snap=nearestConnection(state.wires,keys,point,terminalPoint,state.viewMode,9/scale);if(snap?.terminal){connectTerminal(snap.terminal);return;}if(snap?.wire)wireId=snap.wire;}
-  const source=pendingTerminal,target=getWire(wireId),hit=target&&projectOnWire(target,point,terminalPoint,state.viewMode);if(target&&!hit)return;const p=hit?.point??(state.viewMode==='physical'?{x:point.x,y:point.y}:{x:Math.round(point.x/10)*10,y:Math.round(point.y/10)*10});
+  if(!wireId){const keys=[...state.components.flatMap(c=>visibleTerminals(c,state.wires,state.viewMode).map(i=>`${c.id}:${i}`)),...state.junctions.map(n=>`${n.id}:0`)],snap=nearestConnection(state.wires,keys,point,terminalPoint,state.viewMode,9/scale,displayedWirePoints);if(snap?.terminal){connectTerminal(snap.terminal);return;}if(snap?.wire)wireId=snap.wire;}
+  const source=pendingTerminal,target=getWire(wireId),hit=target&&projectOnWire(target,point,terminalPoint,state.viewMode,displayedWirePoints);if(target&&!hit)return;const p=hit?.point??(state.viewMode==='physical'?{x:point.x,y:point.y}:{x:Math.round(point.x/10)*10,y:Math.round(point.y/10)*10});
   if(target){const key=[target.a,target.b].find(k=>{const t=terminalPoint(k);return Math.hypot(t.x-p.x,t.y-p.y)<1;});if(key){connectTerminal(key);return;}}
-  const existing=state.junctions.find(n=>Math.hypot(n.x-p.x,n.y-p.y)<(target?.1:6)),crossing=target?state.wires.filter(w=>{const h=projectOnWire(w,p,terminalPoint,state.viewMode);return h&&h.distance<.1&&splitWire(w,p,terminalPoint,'candidate:0','candidate',state.viewMode);}):[];
+  const existing=state.junctions.find(n=>Math.hypot(n.x-p.x,n.y-p.y)<(target?.1:6)),crossing=target?state.wires.filter(w=>{const h=projectOnWire(w,p,terminalPoint,state.viewMode,displayedWirePoints);return h&&h.distance<.1&&splitWire(w,p,terminalPoint,'candidate:0','candidate',state.viewMode,displayedWirePoints);}):[];
   if((!existing&&state.junctions.length>=500)||state.wires.length+crossing.length+(source?1:0)>1000){toast('节点或导线较多，请先保存当前实验。');return;}
   if(existing&&!source&&!target){select(existing.id);return;}
-  pushHistory();const n=existing??{id:`n${state.nextId++}`,x:p.x,y:p.y};if(!existing)state.junctions.push(n);const terminal=`${n.id}:0`,ids=new Set(crossing.map(w=>w.id));state.wires=state.wires.flatMap(w=>{if(!ids.has(w.id))return [w];const split=splitWire(w,p,terminalPoint,terminal,nextWire(),state.viewMode);if(!split)return [w];for(const part of split.wires)delete part[state.viewMode==='physical'?'via':'physicalVia'];return split.wires;});
+  pushHistory();const n=existing??{id:`n${state.nextId++}`,x:p.x,y:p.y};if(!existing)state.junctions.push(n);const terminal=`${n.id}:0`,ids=new Set(crossing.map(w=>w.id));state.wires=state.wires.flatMap(w=>{if(!ids.has(w.id))return [w];const split=splitWire(w,p,terminalPoint,terminal,nextWire(),state.viewMode,displayedWirePoints);if(!split)return [w];for(const part of split.wires)delete part[state.viewMode==='physical'?'via':'physicalVia'];return split.wires;});
   if(source&&source!==terminal&&!state.wires.some(w=>(w.a===source&&w.b===terminal)||(w.b===source&&w.a===terminal)))state.wires.push(makeWire(source,terminal));
   selected=n.id;cancelWire();state.preset='free';update();
 }
@@ -365,7 +401,7 @@ function endPointer(event,cancelled=false){
 }
 $('board').addEventListener('pointerup',e=>endPointer(e));$('board').addEventListener('pointercancel',e=>endPointer(e,true));
 $('board').addEventListener('wheel',e=>{e.preventDefault();const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?$('boardWrap').clientHeight:1);setZoom((cameraAnimation?.next.zoom??zoom)*Math.exp(-delta*.0012),e);},{passive:false});
-$('board').addEventListener('keydown',event=>{const terminal=event.target.closest('[data-terminal]'),node=event.target.closest('[data-junction]'),comp=event.target.closest('[data-component]'),wire=event.target.closest('[data-wire]'),id=node?.dataset.junction??comp?.dataset.component??wire?.dataset.wire??terminal?.dataset.ownerComponent;if(['Enter',' '].includes(event.key)){event.preventDefault();if(tool==='erase')deleteSelected(id);else if(tool==='junction'&&terminal)connectTerminal(terminal.dataset.terminal);else if(tool==='junction'&&wire){const p=wirePoints(getWire(wire.dataset.wire),terminalPoint,state.viewMode);if(p.length>1)placeJunction({x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2},wire.dataset.wire);}else select(id);}if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)&&id&&getItem(id)&&tool!=='erase'){event.preventDefault();pushHistory();const item=getItem(id),before=clone(state);moveItem(state,id,{x:item.x+(event.key==='ArrowRight'?10:event.key==='ArrowLeft'?-10:0),y:item.y+(event.key==='ArrowDown'?10:event.key==='ArrowUp'?-10:0)},before);selected=id;update({route:false});$('board').querySelector(`[${node?'data-junction':'data-component'}="${id}"]`)?.focus({preventScroll:true});}});
+$('board').addEventListener('keydown',event=>{const terminal=event.target.closest('[data-terminal]'),node=event.target.closest('[data-junction]'),comp=event.target.closest('[data-component]'),wire=event.target.closest('[data-wire]'),id=node?.dataset.junction??comp?.dataset.component??wire?.dataset.wire??terminal?.dataset.ownerComponent;if(['Enter',' '].includes(event.key)){event.preventDefault();if(tool==='erase')deleteSelected(id);else if(tool==='junction'&&terminal)connectTerminal(terminal.dataset.terminal);else if(tool==='junction'&&wire){const p=displayedWirePoints(getWire(wire.dataset.wire),terminalPoint,state.viewMode);if(p.length>1)placeJunction({x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2},wire.dataset.wire);}else select(id);}if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)&&id&&getItem(id)&&tool!=='erase'){event.preventDefault();pushHistory();const item=getItem(id),before=clone(state);moveItem(state,id,{x:item.x+(event.key==='ArrowRight'?10:event.key==='ArrowLeft'?-10:0),y:item.y+(event.key==='ArrowDown'?10:event.key==='ArrowUp'?-10:0)},before);selected=id;update({route:false});$('board').querySelector(`[${node?'data-junction':'data-component'}="${id}"]`)?.focus({preventScroll:true});}});
 
 function isFullscreen(){return nativeFullscreen||!!document.fullscreenElement;}
 function renderFullscreen(){

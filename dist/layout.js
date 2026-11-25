@@ -71,6 +71,11 @@ export function routeIsClear(points,state,wire,mode=state.viewMode) {
   return bodyCost(points,boxesFor(state,mode,mode==='physical'?2:8),wire)<eps;
 }
 
+export function physicalRouteCost(state) {
+  const boxes=boxesFor(state,'physical',2);
+  return (points,wire)=>points.length<2?0:bodyCost(points,boxes,wire);
+}
+
 /** Proper crossings, T contacts and overlap, including intersections at grid vertices. */
 function intersection(a,b,c,d) {
   if(Math.max(a.x,b.x)<Math.min(c.x,d.x)-eps||Math.min(a.x,b.x)>Math.max(c.x,d.x)+eps||Math.max(a.y,b.y)<Math.min(c.y,d.y)-eps||Math.min(a.y,b.y)>Math.max(c.y,d.y)+eps)return null;
