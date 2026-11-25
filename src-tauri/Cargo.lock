@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-lab-systemwebview"
-version = "2.10.0-beta.7"
+version = "2.10.0"
 dependencies = [
  "gtk",
  "serde_json",
