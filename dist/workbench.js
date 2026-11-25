@@ -17,7 +17,7 @@ import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
 import {renderWireLayer} from './wire-renderer.js?v=wire-curve-1';
-import {physicalWireCurve,physicalWirePolyline,straightWire} from './cable-curve.js?v=wire-display-2';
+import {physicalWireCurve,physicalWirePolyline,straightWire} from './cable-curve.js?v=wire-display-3';
 import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.6';
 import {displayReadings} from './readings.js';
 import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';

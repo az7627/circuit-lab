@@ -8,17 +8,13 @@ import {setTimeout as wait} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
 import {createPreset} from '../dist/models.js';
 import {serializeExperiment} from '../dist/files.js';
-import {idealWireX,rippledWirePoints} from '../tests/fixtures/wire-ripple.mjs';
+import {idealWireX,reportedSparseWirePoints,rippledWirePoints,traceXAtY} from '../tests/fixtures/wire-ripple.mjs';
 
 const artifacts='artifacts/wire-display';
 const viewport={width:1500,height:1000};
 const name='导线曲线测试';
 const points=rippledWirePoints(),physicalVia=points.slice(1,-1);
-const experiment={
-  ...createPreset('free'),viewMode:'physical',view:{x:370,y:240,zoom:5},
-  junctions:[{id:'n1',...points[0]},{id:'n2',...points.at(-1)}],
-  wires:[{id:'w1',a:'n1:0',b:'n2:0',physicalVia}]
-};
+const reportedPoints=reportedSparseWirePoints();
 
 async function freePort(){
   const socket=createServer();
@@ -28,15 +24,20 @@ async function freePort(){
   return port;
 }
 
-async function loadExperiment(page){
+async function loadExperiment(page,trace=points,experimentName=name){
+  const experiment={
+    ...createPreset('free'),viewMode:'physical',view:{x:370,y:240,zoom:5},
+    junctions:[{id:'n1',...trace[0]},{id:'n2',...trace.at(-1)}],
+    wires:[{id:'w1',a:'n1:0',b:'n2:0',physicalVia:trace.slice(1,-1)}]
+  };
   await page.locator('#experimentFile').setInputFiles({
-    name:'wire-curve.json',mimeType:'application/json',buffer:Buffer.from(serializeExperiment(experiment,name))
+    name:'wire-curve.json',mimeType:'application/json',buffer:Buffer.from(serializeExperiment(experiment,experimentName))
   });
-  await page.waitForFunction(name=>document.getElementById('activeExperimentName').textContent===name,name);
+  await page.waitForFunction(name=>document.getElementById('activeExperimentName').textContent===name,experimentName);
   await page.locator('#workspace').evaluate(async el=>{await Promise.all(el.getAnimations().map(animation=>animation.finished));});
 }
 
-async function measure(page,label){
+async function measure(page,label,{minX=348,maxX=391,expectedX=idealWireX,reported=false}={}){
   const wire=page.locator('.wire-base');
   const geometry=await wire.evaluate(el=>{
     const {a,d,e,f}=el.getScreenCTM();
@@ -46,13 +47,13 @@ async function measure(page,label){
   const {a,d,e,f,dpr,zoom,uiZoom}=geometry;
   assert.equal(zoom,5);
   assert.equal(uiZoom,1);
-  const left=Math.floor(a*348+e),top=Math.floor(d*184+f);
-  const clip={x:left,y:top,width:Math.ceil(a*391+e)-left,height:Math.ceil(d*296+f)-top};
+  const left=Math.floor(a*minX+e),top=Math.floor(d*184+f);
+  const clip={x:left,y:top,width:Math.ceil(a*maxX+e)-left,height:Math.ceil(d*296+f)-top};
   assert.ok(clip.x>0&&clip.y>0);
   const png=await page.screenshot({path:`${artifacts}/${label}.png`,clip,scale:'device'});
   const rows=Array.from({length:97},(_,i)=>{
     const y=Math.floor((d*(192+i)+f-top)*dpr),worldY=(top+(y+.5)/dpr-f)/d;
-    return {y,worldY,expected:idealWireX(worldY)};
+    return {y,worldY,expected:expectedX(worldY)};
   });
   const centers=await page.evaluate(async({png,rows,geometry,clip})=>{
     const bytes=Uint8Array.from(atob(png),char=>char.charCodeAt(0));
@@ -63,15 +64,19 @@ async function measure(page,label){
     const {width,height,data}=context.getImageData(0,0,bitmap.width,bitmap.height);
     const {a,e,dpr}=geometry;
     const centers=rows.map(({y,expected})=>{
-      const start=Math.floor(((expected-7)*a+e-clip.x)*dpr),end=Math.ceil(((expected+7)*a+e-clip.x)*dpr);
-      let first=-1,last=-1;
-      for(let x=start;x<=end;x++){
-        const offset=4*(y*width+x);
-        const red=data[offset],green=data[offset+1];
-        if(red>90&&red-green>30){if(first===-1)first=x;last=x;}
+      const start=Math.max(0,Math.floor(((expected-7)*a+e-clip.x)*dpr));
+      const end=Math.min(width-1,Math.ceil(((expected+7)*a+e-clip.x)*dpr));
+      let mass=0,total=0;
+      for(let row=y-3;row<=y+3;row++){
+        for(let x=start;x<=end;x++){
+          const offset=4*(row*width+x);
+          const weight=Math.max(0,data[offset]-data[offset+1]-12);
+          mass+=weight;
+          total+=weight*(x+.5);
+        }
       }
-      if(first===-1)throw Error(JSON.stringify({y,start,end,width,height,clip,geometry}));
-      return (clip.x+(first+last+1)/(2*dpr)-e)/a;
+      if(!mass)throw Error(JSON.stringify({y,start,end,width,height,clip,geometry}));
+      return (clip.x+total/(mass*dpr)-e)/a;
     });
     return {width,height,centers};
   },{png:png.toString('base64'),rows,geometry,clip});
@@ -79,9 +84,26 @@ async function measure(page,label){
   assert.ok(Math.abs(centers.height-clip.height*dpr)<=2);
   const rms=values=>Math.hypot(...values)/Math.sqrt(values.length);
   const residuals=centers.centers.map((x,i)=>x-rows[i].expected);
-  const ripple=rms(residuals.slice(1,-1).map((x,i)=>residuals[i]-2*x+residuals[i+2]));
+  const line=reported?centers.centers:residuals;
+  const differences=line.slice(1,-1).map((x,i)=>{
+    const left=rows[i+1].worldY-rows[i].worldY,right=rows[i+2].worldY-rows[i+1].worldY;
+    return (line[i+2]-x)/right-(x-line[i])/left;
+  });
+  const ripple=rms(differences),peak=Math.max(...differences.map(Math.abs));
   const deviation=rms(residuals);
-  return {label,dpr,zoom,uiZoom,ripple,deviation,path:geometry.path};
+  return {label,dpr,zoom,uiZoom,ripple,peak,deviation,path:geometry.path};
+}
+
+async function checkReported(page,label,verify){
+  await loadExperiment(page,reportedPoints,'截图导线路径');
+  const report=await measure(page,label,{
+    minX:324,maxX:369,expectedX:y=>traceXAtY(reportedPoints,y),reported:true
+  });
+  if(verify){
+    assert.doesNotMatch(report.path,/[CQ]/);
+    assert.ok(report.peak<.095&&report.deviation<.3,JSON.stringify({label,peak:report.peak,deviation:report.deviation}));
+  }
+  return report;
 }
 
 async function openSettings(page){
@@ -181,6 +203,7 @@ async function runBrowser(directory,label,verify){
       const context=await browser.newContext({viewport,deviceScaleFactor,colorScheme:'dark'});
       const page=await context.newPage();
       await page.goto(`http://127.0.0.1:${port}`);
+      if(verify)await checkReported(page,`reported-${deviceScaleFactor*100}`,true);
       const report=await checkDisplay(page,`${label}-${deviceScaleFactor*100}`,verify);
       assert.ok(report.every(item=>item.dpr===deviceScaleFactor));
       result.push(...report);
@@ -195,7 +218,7 @@ async function runBrowser(directory,label,verify){
   }
 }
 
-async function runNative(executable,label,verify){
+async function runNative(executable,inspect){
   const port=await freePort(),endpoint=`http://127.0.0.1:${port}`;
   const profile=await mkdtemp(path.join(tmpdir(),'circuit-lab-wire-test-'));
   const child=spawn(executable,[],{windowsHide:true,env:{
@@ -215,7 +238,7 @@ async function runNative(executable,label,verify){
     browser=await chromium.connectOverCDP(endpoint,{timeout:5000});
     const [page]=browser.contexts()[0].pages();
     await page.waitForSelector('[data-add]',{state:'attached'});
-    return await checkDisplay(page,label,verify);
+    return await inspect(page);
   }finally{
     child.kill();
     await browser?.close();
@@ -238,10 +261,20 @@ if(process.env.CIRCUIT_LAB_WIRE_BASELINE){
   reports.push(...before);
 }
 if(process.env.CIRCUIT_LAB_WIRE_NATIVE_FIXED){
-  const fixed=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_FIXED,'windows-fixed',true);
+  const [reported,...fixed]=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_FIXED,async page=>[
+    await checkReported(page,'windows-reported-fixed',true),...await checkDisplay(page,'windows-fixed',true)
+  ]);
   reports.push(...fixed);
+  reports.push(reported);
+  if(process.env.CIRCUIT_LAB_WIRE_NATIVE_PREVIOUS){
+    const previous=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_PREVIOUS,page=>
+      checkReported(page,'windows-reported-previous',false));
+    assert.equal(reported.dpr,previous.dpr);
+    assert.ok(reported.peak<previous.peak*.65,JSON.stringify({previous,reported}));
+    reports.push(previous);
+  }
   if(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE){
-    const [before]=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE,'windows-beta6',false);
+    const [before]=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE,page=>checkDisplay(page,'windows-beta6',false));
     fixed.forEach(report=>compare(before,report));
     reports.push(before);
   }

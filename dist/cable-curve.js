@@ -124,29 +124,42 @@ export function physicalWirePolyline(points) {
   const trace=points.length>=4&&sampledTrace(points);
   if(!trace)return {path:straightWire(points),points};
   const {samples,lengths,atLength,corners}=trace;
-  const filtered=samples.slice();
+  const step=Math.max(.5,lengths.at(-1)/1536);
+  const filtered=[samples[0]];
   let changed=false;
-  // Average nearby samples at equal arc-length offsets. The symmetric window
-  // shrinks at corners and ends, and sparse routes keep their existing bends.
+  // Resample between deliberate corners so a long recorded edge cannot keep
+  // its abrupt tangent change. The output remains an SVG polyline.
   for(let span=1;span<corners.length;span++){
     const start=corners[span-1],end=corners[span];
-    for(let i=start+1;i<end;i++){
-      const length=lengths[i];
-      if(lengths[i+1]-length>6||length-lengths[i-1]>6)continue;
-      const radius=Math.min(4,length-lengths[start],lengths[end]-length);
-      let x=0,y=0;
-      for(let offset=-3;offset<=3;offset++){
-        const sample=atLength(length+radius*offset/3,start,end);
-        x+=sample.x;
-        y+=sample.y;
+    if(end-start>1){
+      const first=lengths[start],last=lengths[end],extent=last-first;
+      const segments=Math.ceil(extent/step);
+      const radius=Math.min(8,extent/2);
+      function sampleAt(length){
+        if(length<first)return mix(atLength(2*first-length,start,end),samples[start],2);
+        if(length>last)return mix(atLength(2*last-length,start,end),samples[end],2);
+        return atLength(length,start,end);
       }
-      const mean={x:x/7,y:y/7},movement=distance(samples[i],mean);
-      if(movement<=1e-7)continue;
-      filtered[i]=mix(samples[i],mean,Math.min(1,1.3/movement));
-      changed=true;
+      for(let i=1;i<segments;i++){
+        const length=first+i*extent/segments,point=sampleAt(length);
+        let dx=0,dy=0;
+        // Triangular weights emphasize nearby points. Reflect the trace
+        // at its ends to keep the window symmetric without crossing a corner.
+        for(let offset=-7;offset<=7;offset++){
+          const sample=sampleAt(length+radius*offset/8);
+          const weight=(8-Math.abs(offset))/64;
+          dx+=(sample.x-point.x)*weight;
+          dy+=(sample.y-point.y)*weight;
+        }
+        const movement=Math.hypot(dx,dy);
+        const factor=1/Math.hypot(1,movement/1.5);
+        filtered.push({x:point.x+dx*factor,y:point.y+dy*factor});
+        if(movement>1e-7)changed=true;
+      }
     }
+    filtered.push(samples[end]);
   }
-  const display=changed?filtered:points;
+  const display=changed?simplifyTrace(filtered,.01,4096):points;
   return {path:straightWire(display),points:display};
 }
 

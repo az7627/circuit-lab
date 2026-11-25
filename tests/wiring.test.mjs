@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {projectOnWire,splitWire,wirePoints} from '../dist/wiring.js';
 import {solveCircuit} from '../dist/solver.js';
 import {physicalWireCurve,physicalWirePolyline,straightWire} from '../dist/cable-curve.js';
-import {idealWireX,rippledWirePoints} from './fixtures/wire-ripple.mjs';
+import {idealWireX,reportedSparseWirePoints,rippledWirePoints,traceXAtY} from './fixtures/wire-ripple.mjs';
 const positions={'e:0':{x:0,y:0},'r:0':{x:120,y:80}};
 const point=key=>positions[key];
 
@@ -11,10 +11,7 @@ test('both physical wire display modes reduce centerline ripples in saved points
   const raw=rippledWirePoints(),saved=structuredClone(raw);
   const rms=errors=>Math.hypot(...errors)/Math.sqrt(errors.length);
   function deviations(points){
-    return Array.from({length:97},(_,i)=>{
-      const y=192+i,index=points.findIndex(point=>point.y>=y),a=points[index-1],b=points[index];
-      return a.x+(b.x-a.x)*(y-a.y)/(b.y-a.y)-idealWireX(y);
-    });
+    return Array.from({length:97},(_,i)=>traceXAtY(points,192+i)-idealWireX(192+i));
   }
   const ripple=errors=>rms(errors.slice(1,-1).map((value,i)=>value-(errors[i]+errors[i+2])/2));
   const before=deviations(raw);
@@ -29,6 +26,18 @@ test('both physical wire display modes reduce centerline ripples in saved points
     assert.deepEqual(display.points.at(-1),raw.at(-1));
   }
   assert.deepEqual(raw,saved);
+});
+
+test('the default polyline softens short kinks between long edges on the reported arc',()=>{
+  const raw=reportedSparseWirePoints(),display=physicalWirePolyline(raw);
+  const sample=points=>Array.from({length:97},(_,i)=>traceXAtY(points,192+i));
+  const peak=values=>Math.max(...values.slice(1,-1).map((x,i)=>Math.abs(values[i]-2*x+values[i+2])));
+  const before=sample(raw),after=sample(display.points);
+  assert.doesNotMatch(display.path,/[CQ]/);
+  assert.ok(peak(after)<peak(before)*.38);
+  assert.ok(Math.max(...after.map((x,i)=>Math.abs(x-before[i])))<.4);
+  assert.deepEqual(display.points[0],raw[0]);
+  assert.deepEqual(display.points.at(-1),raw.at(-1));
 });
 
 test('cable fitting retains a deliberate right angle and the displayed geometry can be split',()=>{
