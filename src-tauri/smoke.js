@@ -32,7 +32,10 @@
       check(JSON.stringify(actual)===JSON.stringify(actions),'窗口按钮顺序与桌面设置不一致');
     }
     if(chrome.macos)check(chrome.left.join(',')==='close,minimize,maximize'&&!chrome.right.length,'macOS 红绿灯未放在左侧');
-    check(document.querySelector('.site-header[data-tauri-drag-region]'),'顶栏拖动区域未启用');
+    const caption=document.querySelector('.header-panel-content');
+    const brand=caption.querySelector('.brand');
+    check(brand.tagName==='DIV'&&!brand.hasAttribute('tabindex'),'应用标题仍可点击或聚焦');
+    check(caption.getAttribute('data-tauri-drag-region')==='deep'&&caption.contains(document.getElementById('layoutControls')),'完整顶栏拖动区域未启用');
     const grips=document.getElementById('windowResizeHandles');
     if(chrome.windows){
       check(!grips.hidden&&grips.children.length===8,'触屏缩放触区缺失');
@@ -65,13 +68,16 @@
     fullscreen.click();
     await until(()=>fullscreen.getAttribute('aria-pressed')==='true','未进入全屏');
     check(grips.hidden,'全屏中仍有窗口缩放触区');
+    check(!caption.hasAttribute('data-tauri-drag-region'),'全屏中仍可拖动窗口');
     headerToggle.click();
     check(!headerToggle.disabled&&document.body.classList.contains('header-collapsed'),'全屏时不能收起顶栏');
     fullscreen.click();
     await until(()=>fullscreen.getAttribute('aria-pressed')==='false','未退出全屏');
     check(headerToggle.disabled&&!document.body.classList.contains('header-collapsed'),'退出全屏后没有恢复顶栏');
+    check(caption.getAttribute('data-tauri-drag-region')==='deep','退出全屏后没有恢复拖动区域');
     const titleBar=document.getElementById('titleBarSetting');titleBar.checked=false;titleBar.dispatchEvent(new Event('change'));
     await until(async()=>(await invoke('desktop_window_state')).decorated,'原生标题栏未恢复');
+    await until(()=>!caption.hasAttribute('data-tauri-drag-region'),'原生标题栏恢复后仍可拖动应用顶栏');
     await invoke('system_smoke_report',{report:{engine:navigator.userAgent,components:2,theme:'dark',uiScale:1.25,persistence:true,export:true,fullscreen:true,currentFlow:true,titleBar:true,windowGestures:chrome.windows}});
   }catch(error){await invoke('system_smoke_report',{report:{error:error.stack||String(error)}});}
 })();

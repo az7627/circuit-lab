@@ -1,4 +1,5 @@
 export const resizeDirections = ['n','ne','e','se','s','sw','w','nw'];
+const controls = 'button, a, input, select, textarea, label, summary, [contenteditable], [tabindex]:not([tabindex="-1"])';
 
 export function draggedBounds(bounds, direction, dx, dy) {
   const {x,y,width,height,minWidth,minHeight} = bounds;
@@ -97,7 +98,8 @@ export function bindWindowGestures(caption, handles, invoke) {
   function bind(target,direction) {
     target.addEventListener('pointerdown',event=>{
       if (!event.isPrimary || event.button!==0 || (drag&&!drag.finished)) return;
-      if (direction==='move' && event.pointerType==='mouse') return;
+      if (direction==='move' && (event.pointerType==='mouse' ||
+        !target.hasAttribute('data-tauri-drag-region') || event.target.closest(controls))) return;
       target.setPointerCapture(event.pointerId);
       event.preventDefault();
       drag={

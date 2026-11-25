@@ -332,7 +332,7 @@ dialog{
 .ui-scale-control input[type=range]{margin:0;min-width:0;flex:1}
 .ui-scale-control output{min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
 .ui-compact-settings .ui-scale-control{flex:1 0 100%}
-#titleBarSettingRow[hidden],.window-controls[hidden],.window-drag-area{display:none}
+#titleBarSettingRow[hidden],.window-controls[hidden]{display:none}
 #componentPresetsPanel>p{color:var(--text-secondary)}
 #componentPresetFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,232px),1fr));gap:12px}
 #componentPresetFields fieldset{min-width:0;margin:0;padding:8px 10px 10px;border:1px solid var(--line);border-radius:7px}
@@ -345,8 +345,6 @@ dialog{
 .desktop-frameless .site-header{flex:1;overscroll-behavior-inline:contain;padding-inline-start:4px}
 .desktop-frameless .layout-controls.in-header{position:static;order:-1;flex:none;margin-inline-start:4px}
 .desktop-frameless .layout-controls.in-header .tool-button{width:min(30px,calc(30px / var(--ui-scale)))}
-.desktop-frameless .site-header[data-tauri-drag-region] .window-drag-area{display:block;align-self:stretch;flex:1 0 12px;order:1}
-.ui-compact-settings .desktop-frameless .site-header[data-tauri-drag-region] .window-drag-area{flex:0 0 12px;order:-1}
 .desktop-frameless .header-actions{order:2}
 .window-controls{display:flex;align-items:center;flex:none;align-self:stretch;white-space:nowrap}
 #windowControlsLeft{order:-2}
@@ -373,16 +371,8 @@ dialog{
 .windows-frameless:has(#windowResizeHandles:not([hidden])) .header-panel-content{
   padding-inline:calc(16px / var(--ui-scale))
 }
-.windows-frameless .site-header[data-tauri-drag-region] .window-drag-area{
-  display:grid;place-items:center;flex-basis:calc(32px / var(--ui-scale));touch-action:none
-}
-.ui-compact-settings .windows-frameless .site-header[data-tauri-drag-region] .window-drag-area{
-  flex-basis:calc(32px / var(--ui-scale))
-}
-.windows-frameless .window-drag-area::after{
-  content:'';width:calc(24px / var(--ui-scale));height:calc(3px / var(--ui-scale));
-  border-radius:10px;background:var(--text-muted);opacity:.55
-}
+.desktop-frameless .header-panel-content[data-tauri-drag-region]{user-select:none}
+.windows-frameless .header-panel-content[data-tauri-drag-region],.windows-frameless .site-header{touch-action:none}
 #windowResizeHandles{
   --edge:calc(16px / var(--ui-scale));--corner:calc(26px / var(--ui-scale));
   position:fixed;inset:0;z-index:300;pointer-events:none

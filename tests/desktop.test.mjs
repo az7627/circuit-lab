@@ -23,6 +23,10 @@ test('window grips resize from each edge and keep the opposite sides fixed at mi
 test('a touch release at the moved window origin does not apply the move a second time',async()=>{
   class TouchTarget extends EventTarget {
     dataset={};
+    dragRegion=true;
+    control=false;
+    hasAttribute(name){return this.dragRegion&&name==='data-tauri-drag-region';}
+    closest(){return this.control?this:null;}
     setPointerCapture(){}
   }
   const caption=new TouchTarget(),frames=[],applied=[];
@@ -39,6 +43,15 @@ test('a touch release at the moved window origin does not apply the move a secon
     const send=(type,screenX)=>caption.dispatchEvent(Object.assign(new Event(type,{cancelable:true}),{
       pointerId:1,isPrimary:true,pointerType:'touch',button:0,clientX:500,screenX,screenY:100
     }));
+    caption.control=true;
+    assert.equal(send('pointerdown',500),true);
+    send('pointermove',540);
+    caption.control=false;
+    caption.dragRegion=false;
+    assert.equal(send('pointerdown',500),true);
+    send('pointermove',540);
+    caption.dragRegion=true;
+    assert.equal(frames.length,0);
     send('pointerdown',500);
     send('pointermove',540);
     await Promise.resolve();

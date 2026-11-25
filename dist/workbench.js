@@ -18,7 +18,7 @@ import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
 import {renderWireLayer} from './wire-renderer.js?v=wire-curve-1';
 import {physicalWireCurve,physicalWirePolyline,straightWire} from './cable-curve.js?v=wire-display-3';
-import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.6';
+import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.7';
 import {displayReadings} from './readings.js';
 import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
 
@@ -423,18 +423,15 @@ let windowGesturesBound=false;
 function renderDesktopChrome(){
   const merged=desktopTitleBarHidden&&!isFullscreen();
   document.body.classList.toggle('desktop-frameless',desktopTitleBarHidden);
-  const header=document.querySelector('.site-header');
-  const caption=header.querySelector('.window-drag-area'),handles=$('windowResizeHandles');
+  const caption=$('headerPanel').firstElementChild,handles=$('windowResizeHandles');
   document.body.classList.toggle('windows-frameless',merged&&desktopState.windows);
   handles.hidden=!merged||!desktopState.windows||desktopState.maximized;
   if(merged&&desktopState.windows&&!windowGesturesBound){
     bindWindowGestures(caption,handles,(command,args)=>desktop.invoke(command,args));
     windowGesturesBound=true;
   }
-  for(const area of [header,caption]){
-    if(merged)area.setAttribute('data-tauri-drag-region','deep');
-    else area.removeAttribute('data-tauri-drag-region');
-  }
+  if(merged)caption.setAttribute('data-tauri-drag-region','deep');
+  else caption.removeAttribute('data-tauri-drag-region');
   for(const [id,side] of [['windowControlsLeft','left'],['windowControlsRight','right']]){
     const group=$(id),actions=desktopState[side];
     group.hidden=!merged||!actions.length;
