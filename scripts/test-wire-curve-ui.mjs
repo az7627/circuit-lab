@@ -10,7 +10,7 @@ import {createPreset} from '../dist/models.js';
 import {serializeExperiment} from '../dist/files.js';
 import {idealWireX,rippledWirePoints} from '../tests/fixtures/wire-ripple.mjs';
 
-const artifacts='artifacts/wire-curves';
+const artifacts='artifacts/wire-display';
 const viewport={width:1500,height:1000};
 const name='导线曲线测试';
 const points=rippledWirePoints(),physicalVia=points.slice(1,-1);
@@ -28,12 +28,15 @@ async function freePort(){
   return port;
 }
 
-async function measure(page,label,verify){
+async function loadExperiment(page){
   await page.locator('#experimentFile').setInputFiles({
     name:'wire-curve.json',mimeType:'application/json',buffer:Buffer.from(serializeExperiment(experiment,name))
   });
   await page.waitForFunction(name=>document.getElementById('activeExperimentName').textContent===name,name);
   await page.locator('#workspace').evaluate(async el=>{await Promise.all(el.getAnimations().map(animation=>animation.finished));});
+}
+
+async function measure(page,label){
   const wire=page.locator('.wire-base');
   const geometry=await wire.evaluate(el=>{
     const {a,d,e,f}=el.getScreenCTM();
@@ -78,27 +81,86 @@ async function measure(page,label,verify){
   const residuals=centers.centers.map((x,i)=>x-rows[i].expected);
   const ripple=rms(residuals.slice(1,-1).map((x,i)=>residuals[i]-2*x+residuals[i+2]));
   const deviation=rms(residuals);
-  if(verify){
-    assert.ok(ripple<.10&&deviation<.65,JSON.stringify({label,dpr,ripple,deviation}));
-    const activeState=()=>JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'))
-      .experiments.find(experiment=>experiment.name==='导线曲线测试')?.state;
-    await page.waitForFunction(activeState);
-    assert.deepEqual(await page.evaluate(activeState).then(state=>state.wires[0].physicalVia),physicalVia);
-    const midpoint=await wire.evaluate(el=>{
-      const p=el.getPointAtLength(el.getTotalLength()*.57);
-      const screen=p.matrixTransform(el.getScreenCTM());
-      return {x:p.x,y:p.y,screenX:screen.x,screenY:screen.y};
-    });
-    await page.locator('[data-tool="junction"]').click();
-    await page.mouse.click(midpoint.screenX,midpoint.screenY);
-    await page.locator('[data-junction="n20"]').waitFor({state:'attached'});
-    assert.equal(await page.locator('.wire-base').count(),2);
-    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'))
-      .experiments.find(experiment=>experiment.name==='导线曲线测试').state.wires.length===2);
-    const node=(await page.evaluate(activeState)).junctions.find(node=>node.id==='n20');
-    assert.ok(Math.hypot(node.x-midpoint.x,node.y-midpoint.y)<.2,JSON.stringify({node,midpoint}));
-  }
   return {label,dpr,zoom,uiZoom,ripple,deviation,path:geometry.path};
+}
+
+async function openSettings(page){
+  const button=page.locator('#settingsButton');
+  if(await button.evaluate(el=>!!el.closest('#headerActionsMenu')?.hidden))await page.locator('#headerMoreButton').click();
+  await button.click();
+}
+
+async function verifyEditing(page){
+  const wire=page.locator('.wire-base');
+  const activeState=()=>JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'))
+    .experiments.find(experiment=>experiment.name==='导线曲线测试')?.state;
+  await page.waitForFunction(activeState);
+  assert.deepEqual((await page.evaluate(activeState)).wires[0].physicalVia,physicalVia);
+  await page.locator('[data-tool="junction"]').click();
+  const midpoint=await wire.evaluate(el=>{
+    const p=el.getPointAtLength(el.getTotalLength()*.57);
+    const screen=p.matrixTransform(el.getScreenCTM());
+    return {x:p.x,y:p.y,screenX:screen.x,screenY:screen.y,
+      hit:document.elementFromPoint(screen.x,screen.y)?.closest('[data-wire]')?.dataset.wire};
+  });
+  assert.equal(midpoint.hit,'w1',JSON.stringify(midpoint));
+  await page.mouse.click(midpoint.screenX,midpoint.screenY);
+  await page.locator('[data-junction="n20"]').waitFor({state:'attached'});
+  assert.equal(await wire.count(),2);
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('circuit-lab-experiments-v2'))
+    .experiments.find(experiment=>experiment.name==='导线曲线测试').state.wires.length===2);
+  const node=(await page.evaluate(activeState)).junctions.find(node=>node.id==='n20');
+  assert.ok(Math.hypot(node.x-midpoint.x,node.y-midpoint.y)<.2,JSON.stringify({node,midpoint}));
+
+  const trace=await page.locator('#board').evaluate((svg,start)=>{
+    const matrix=svg.getScreenCTM();
+    return Array.from({length:25},(_,i)=>{
+      const point=svg.createSVGPoint();
+      point.x=start.x+32*Math.sin(i/24*Math.PI/2);
+      point.y=start.y+72*i/24;
+      const {x,y}=point.matrixTransform(matrix);
+      return {x,y};
+    });
+  },points[0]);
+  await page.mouse.move(trace[0].x,trace[0].y);
+  await page.mouse.down();
+  const preview=page.locator('#wirePreview');
+  let previous=[];
+  for(const {x,y} of trace.slice(1)){
+    await page.mouse.move(x,y);
+    const path=await preview.getAttribute('d');
+    assert.match(path,/^M[^CQL]+L[^CQ]+$/);
+    const vertices=path.slice(1).split('L');
+    assert.deepEqual(vertices.slice(0,previous.length),previous);
+    previous=vertices.slice(0,-1);
+  }
+  await page.mouse.up();
+  assert.equal(await preview.getAttribute('d'),'');
+  await page.locator('[data-junction="n22"]').waitFor({state:'attached'});
+  const added=await page.locator('[data-wire] .wire-base').last().getAttribute('d');
+  assert.match(added,/C/);
+}
+
+async function checkDisplay(page,label,verify){
+  await loadExperiment(page);
+  if(!verify)return [await measure(page,label)];
+  const polyline=await measure(page,`${label}-polyline`);
+  assert.doesNotMatch(polyline.path,/[CQ]/);
+  assert.ok(polyline.ripple<.14&&polyline.deviation<.65,JSON.stringify(polyline));
+  await openSettings(page);
+  const setting=page.locator('#fitPhysicalWiresSetting');
+  assert.equal(await setting.isChecked(),false);
+  await setting.locator('..').click();
+  assert.equal(await setting.isChecked(),true);
+  await page.locator('[data-close="settingsDialog"]').click();
+  await page.locator('#settingsDialog').waitFor({state:'hidden'});
+  const fitted=await measure(page,`${label}-fitted`);
+  assert.match(fitted.path,/C/);
+  assert.ok(fitted.ripple<.12&&fitted.deviation<.65,JSON.stringify(fitted));
+  await page.reload();
+  assert.equal(await page.locator('.wire-base').getAttribute('d'),fitted.path);
+  await verifyEditing(page);
+  return [polyline,fitted];
 }
 
 async function runBrowser(directory,label,verify){
@@ -119,12 +181,13 @@ async function runBrowser(directory,label,verify){
       const context=await browser.newContext({viewport,deviceScaleFactor,colorScheme:'dark'});
       const page=await context.newPage();
       await page.goto(`http://127.0.0.1:${port}`);
-      const report=await measure(page,`${label}-${deviceScaleFactor*100}`,verify);
-      assert.equal(report.dpr,deviceScaleFactor);
-      result.push(report);
+      const report=await checkDisplay(page,`${label}-${deviceScaleFactor*100}`,verify);
+      assert.ok(report.every(item=>item.dpr===deviceScaleFactor));
+      result.push(...report);
       await context.close();
     }
-    assert.equal(result[0].path,result[1].path);
+    const modes=verify?2:1;
+    for(let i=0;i<modes;i++)assert.equal(result[i].path,result[i+modes].path);
     return result;
   }finally{
     server.kill();
@@ -152,7 +215,7 @@ async function runNative(executable,label,verify){
     browser=await chromium.connectOverCDP(endpoint,{timeout:5000});
     const [page]=browser.contexts()[0].pages();
     await page.waitForSelector('[data-add]',{state:'attached'});
-    return await measure(page,label,verify);
+    return await checkDisplay(page,label,verify);
   }finally{
     child.kill();
     await browser?.close();
@@ -168,15 +231,18 @@ await mkdir(artifacts,{recursive:true});
 const reports=await runBrowser(process.cwd(),'fixed',true);
 if(process.env.CIRCUIT_LAB_WIRE_BASELINE){
   const before=await runBrowser(process.env.CIRCUIT_LAB_WIRE_BASELINE,'beta6',false);
-  before.forEach((report,i)=>compare(report,reports[i]));
+  before.forEach((report,i)=>{
+    compare(report,reports[i*2]);
+    compare(report,reports[i*2+1]);
+  });
   reports.push(...before);
 }
 if(process.env.CIRCUIT_LAB_WIRE_NATIVE_FIXED){
   const fixed=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_FIXED,'windows-fixed',true);
-  reports.push(fixed);
+  reports.push(...fixed);
   if(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE){
-    const before=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE,'windows-beta6',false);
-    compare(before,fixed);
+    const [before]=await runNative(process.env.CIRCUIT_LAB_WIRE_NATIVE_BASELINE,'windows-beta6',false);
+    fixed.forEach(report=>compare(before,report));
     reports.push(before);
   }
 }

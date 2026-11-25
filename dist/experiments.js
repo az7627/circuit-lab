@@ -2,7 +2,7 @@ import {clone,normalizeState} from './data.js?v=2.10.0-beta.5';
 import {definitions,normalizeComponentPreset} from './models.js?v=2.10.0-beta.5';
 import {normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
 export const EXPERIMENTS_KEY='circuit-lab-experiments-v2';
-const defaultSettings={sound:true,volume:.35,motion:true,theme:'system',uiScale:1};
+const defaultSettings={sound:true,volume:.35,motion:true,theme:'system',uiScale:1,fitPhysicalWires:false};
 export function saveErrorMessage(error){
   if(['QuotaExceededError','NS_ERROR_DOM_QUOTA_REACHED'].includes(error?.name))return '浏览器为此应用分配的存储空间不足，本次修改尚未保存。请导出备份后清理不需要的实验。';
   if(['SecurityError','NotAllowedError'].includes(error?.name))return '浏览器阻止了此应用使用本地存储，本次修改尚未保存。请检查此网站的存储权限或导出备份。';
@@ -18,6 +18,7 @@ export function normalizeCollection(input){
   output.draft=normalizeState(input.draft);output.draftName=typeof input.draftName==='string'&&input.draftName.length<=60?input.draftName:'未保存的实验';
   output.settings={sound:input.settings?.sound!==false,volume:Number.isFinite(input.settings?.volume)?Math.max(0,Math.min(1,input.settings.volume)):.35,motion:input.settings?.motion!==false,theme:['system','light','dark'].includes(input.settings?.theme)?input.settings.theme:'system',uiScale:normalizeUiScale(input.settings?.uiScale)};
   output.settings.hideTitleBar=input.settings?.hideTitleBar===true;
+  output.settings.fitPhysicalWires=input.settings?.fitPhysicalWires===true;
   output.settings.componentPresets={};
   for(const type of Object.keys(definitions)){
     const preset=normalizeComponentPreset(type,input.settings?.componentPresets?.[type]);

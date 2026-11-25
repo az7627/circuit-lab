@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {projectOnWire,splitWire,wirePoints} from '../dist/wiring.js';
 import {solveCircuit} from '../dist/solver.js';
-import {physicalWireCurve,straightWire} from '../dist/cable-curve.js';
+import {physicalWireCurve,physicalWirePolyline,straightWire} from '../dist/cable-curve.js';
 import {idealWireX,rippledWirePoints} from './fixtures/wire-ripple.mjs';
 const positions={'e:0':{x:0,y:0},'r:0':{x:120,y:80}};
 const point=key=>positions[key];
 
-test('physical cable fitting removes small centerline ripples already present in saved points',()=>{
-  const raw=rippledWirePoints(),saved=structuredClone(raw),fitted=physicalWireCurve(raw);
+test('both physical wire display modes reduce centerline ripples in saved points',()=>{
+  const raw=rippledWirePoints(),saved=structuredClone(raw);
   const rms=errors=>Math.hypot(...errors)/Math.sqrt(errors.length);
   function deviations(points){
     return Array.from({length:97},(_,i)=>{
@@ -17,17 +17,25 @@ test('physical cable fitting removes small centerline ripples already present in
     });
   }
   const ripple=errors=>rms(errors.slice(1,-1).map((value,i)=>value-(errors[i]+errors[i+2])/2));
-  const before=deviations(raw),after=deviations(fitted.points);
-  assert.ok(ripple(after)<ripple(before)*.15);
-  assert.ok(rms(after)<rms(before));
-  assert.deepEqual(fitted.points[0],raw[0]);assert.deepEqual(fitted.points.at(-1),raw.at(-1));
+  const before=deviations(raw);
+  const polyline=physicalWirePolyline(raw),fitted=physicalWireCurve(raw);
+  assert.doesNotMatch(polyline.path,/[CQ]/);
   assert.match(fitted.path,/C/);
+  for(const [display,limit] of [[polyline,.3],[fitted,.15]]){
+    const after=deviations(display.points);
+    assert.ok(ripple(after)<ripple(before)*limit);
+    assert.ok(rms(after)<rms(before));
+    assert.deepEqual(display.points[0],raw[0]);
+    assert.deepEqual(display.points.at(-1),raw.at(-1));
+  }
   assert.deepEqual(raw,saved);
 });
 
 test('cable fitting retains a deliberate right angle and the displayed geometry can be split',()=>{
   const corner=[{x:0,y:0},{x:60,y:0},{x:60,y:80}];
   assert.equal(physicalWireCurve(corner).path,straightWire(corner));
+  const sampledCorner=[{x:0,y:0},{x:2,y:0},{x:4,y:0},{x:4,y:2},{x:4,y:4}];
+  assert.equal(physicalWirePolyline(sampledCorner).path,straightWire(sampledCorner));
   const points=rippledWirePoints(),wire={id:'w1',a:'n1:0',b:'n2:0',physicalVia:points.slice(1,-1)};
   const terminals={'n1:0':points[0],'n2:0':points.at(-1)};
   const display=()=>physicalWireCurve(points).points;

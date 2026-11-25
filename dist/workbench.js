@@ -7,7 +7,7 @@ import {icons,icon} from './icons.js?v=2.10.0-beta.5';
 import {componentTerminal,componentBounds,componentHitBounds,labelOffset,fitCamera,viewportGeometry,panCamera} from './visuals.js?v=2.6';
 import {wirePoints,projectOnWire,splitWire,simplifyTrace,tracedRoute,nearestConnection} from './wiring.js?v=wire-curve-1';
 import {clone,normalizeState,pruneLayoutCaches} from './data.js?v=2.10.0-beta.5';
-import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=2.10.0-beta.5';
+import {ExperimentStore,normalizeCollection,saveErrorMessage} from './experiments.js?v=wire-display-2';
 import {BellAudio} from './audio.js?v=2.6';
 import {RotorMotion} from './motion.js?v=2.6';
 import {serializeExperiment,parseExperiment,experimentFilename,importedExperimentName} from './files.js?v=2.10.0-beta.5';
@@ -17,7 +17,7 @@ import {schematicJunctionDots} from './connections.js';
 import {CircuitSimulation} from './simulation.js?v=2.10.0-beta.5';
 import {bindLibraryDrag} from './library-drag.js?v=2.10.0-beta.4';
 import {renderWireLayer} from './wire-renderer.js?v=wire-curve-1';
-import {physicalWireCurve,straightWire} from './cable-curve.js?v=wire-curve-1';
+import {physicalWireCurve,physicalWirePolyline,straightWire} from './cable-curve.js?v=wire-display-2';
 import {bindWindowGestures} from './window-gestures.js?v=2.10.0-beta.6';
 import {displayReadings} from './readings.js';
 import {uiScale,normalizeUiScale} from './ui-scale.js?v=2.10.0-beta.5';
@@ -168,18 +168,25 @@ function prepareCableDisplay(){
 }
 
 function displayedCable(wire,source){
+  const useCurve=store.data.settings.fitPhysicalWires;
   let cached=cableDisplay.get(wire.id);
   if(!cached||source.length!==cached.source.length||
     source.some((point,i)=>point.x!==cached.source[i].x||point.y!==cached.source[i].y)){
     const points=source.map(({x,y})=>({x,y}));
-    cached={source:points,fit:physicalWireCurve(points)};
+    cached={source:points,polyline:physicalWirePolyline(points)};
     cableDisplay.set(wire.id,cached);
   }
-  if(cached.obstacles!==cableObstacleKey||cached.a!==wire.a||cached.b!==wire.b){
-    const fitCost=cached.fit.points===cached.source?0:cableObstacleCost(cached.fit.points,wire);
-    cached.display=fitCost<=1e-6||fitCost<=cableObstacleCost(cached.source,wire)
-      ?cached.fit:{points:cached.source,path:straightWire(cached.source)};
-    Object.assign(cached,{obstacles:cableObstacleKey,a:wire.a,b:wire.b});
+  if(cached.useCurve!==useCurve||cached.obstacles!==cableObstacleKey||cached.a!==wire.a||cached.b!==wire.b){
+    const allowed=display=>{
+      if(display.points===cached.source)return true;
+      const cost=cableObstacleCost(display.points,wire);
+      return cost<=1e-6||cost<=cableObstacleCost(cached.source,wire);
+    };
+    const curve=useCurve?(cached.curve??=physicalWireCurve(cached.source)):null;
+    if(curve&&allowed(curve))cached.display=curve;
+    else if(allowed(cached.polyline))cached.display=cached.polyline;
+    else cached.display={points:cached.source,path:straightWire(cached.source)};
+    Object.assign(cached,{useCurve,obstacles:cableObstacleKey,a:wire.a,b:wire.b});
   }
   return cached.display;
 }
@@ -210,7 +217,7 @@ function renderBoard(){
   for(const id of rotors.keys())if(getComponent(id)?.type!=='motor')rotors.delete(id);startFanFrames();
   updateViewport();renderPreview();if(selector)$('board').querySelector(selector)?.focus({preventScroll:true});
 }
-function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?physicalWireCurve(simplifyTrace([p,...pendingTrace,lastPointer],.2,256)).path:`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
+function renderPreview(){const el=$('wirePreview');if(!el)return;if(pendingTerminal&&lastPointer){const p=terminalPoint(pendingTerminal);el.setAttribute('d',state.viewMode==='physical'?straightWire([p,...pendingTrace,lastPointer]):`M${p.x} ${p.y}H${lastPointer.x}V${lastPointer.y}`);}else el.setAttribute('d','');}
 function renderReadings(){renderPhysics();const reading=solution.components[selected];if($('selectedVoltage'))$('selectedVoltage').textContent=fixed(getJunction(selected)?solution.nodes[`${selected}:0`]:reading?.voltage??0)+' V';if($('selectedCurrent'))$('selectedCurrent').textContent=fixed(reading?.current??0)+' A';if($('selectedPower'))$('selectedPower').textContent=fixed(Math.abs(reading?.power??0))+' W';}
 function updatePropertiesTitle(){
   const c=getComponent(selected),n=getJunction(selected),w=getWire(selected);
@@ -624,7 +631,7 @@ const libraryDrag=bindLibraryDrag({library:$('componentLibrary'),board:$('board'
 $('clearButton').onclick=()=>confirmAction('清空当前实验画布？','元件、节点与导线将被移除。可以通过撤销恢复。',()=>{pushHistory();state={...createPreset('free',state.records),viewMode:state.viewMode};selected=null;cancelWire();update();},'清空画布');
 $('headerToggle').onclick=()=>setHeaderExpanded(document.body.classList.contains('header-collapsed'));$('toolbarToggle').onclick=()=>setToolbarExpanded(document.body.classList.contains('toolbar-collapsed'));
 $('sidebarToggle').onclick=()=>setSidebarExpanded(!document.body.classList.contains('sidebar-open'));$('sidebarScrim').onclick=()=>setSidebarExpanded(false);
-$('settingsButton').onclick=()=>{setSettingsTab('preferences');applyTheme();$('soundSetting').checked=store.data.settings.sound;$('motionSetting').checked=store.data.settings.motion;$('volumeSetting').value=Math.round(store.data.settings.volume*100);$('volumeValue').textContent=$('volumeSetting').value+'%';$('recoverDraftButton').hidden=!(store.data.draft??legacy);openDialog('settingsDialog');};
+$('settingsButton').onclick=()=>{setSettingsTab('preferences');applyTheme();$('fitPhysicalWiresSetting').checked=store.data.settings.fitPhysicalWires;$('soundSetting').checked=store.data.settings.sound;$('motionSetting').checked=store.data.settings.motion;$('volumeSetting').value=Math.round(store.data.settings.volume*100);$('volumeValue').textContent=$('volumeSetting').value+'%';$('recoverDraftButton').hidden=!(store.data.draft??legacy);openDialog('settingsDialog');};
 $('themeSetting').onchange=()=>{const theme=$('themeSetting').value;try{store.settings({theme});}catch{store.data.settings.theme=theme;toast('外观设置暂未保存');}applyTheme();};
 if(desktop){
   $('titleBarSettingRow').hidden=false;
@@ -643,6 +650,13 @@ if(desktop){
 }
 $('uiScaleSetting').oninput=()=>{$('uiScaleValue').textContent=$('uiScaleSetting').value+'%';};
 $('uiScaleSetting').onchange=()=>{const value=Number($('uiScaleSetting').value)/100;try{store.settings({uiScale:value});}catch{store.data.settings.uiScale=value;toast('界面缩放暂未保存');}applyUiScale();};
+$('fitPhysicalWiresSetting').onchange=()=>{
+  const control=$('fitPhysicalWiresSetting');
+  try{store.settings({fitPhysicalWires:control.checked});}
+  catch(error){toast(saveErrorMessage(error));}
+  control.checked=store.data.settings.fitPhysicalWires;
+  renderBoard();
+};
 document.querySelectorAll('[data-settings-tab]').forEach(el=>el.onclick=()=>setSettingsTab(el.dataset.settingsTab));
 for(const id of ['soundSetting','motionSetting','volumeSetting'])$(id).oninput=()=>{const next={sound:$('soundSetting').checked,motion:$('motionSetting').checked,volume:Number($('volumeSetting').value)/100};try{store.settings(next);}catch{Object.assign(store.data.settings,next);toast('设置暂未保存');}$('volumeValue').textContent=$('volumeSetting').value+'%';renderAudioState();renderBoard();audio.sync(activeId?state.components:[],solution.components,store.data.settings);};
 $('archivedList').onclick=event=>{const restore=event.target.closest('[data-restore-experiment]'),del=event.target.closest('[data-delete-experiment]');if(restore){if(tryStore(()=>store.restore(restore.dataset.restoreExperiment)))toast('实验已恢复到列表');}if(del)deleteExperiment(del.dataset.deleteExperiment);};
@@ -657,11 +671,16 @@ window.addEventListener('storage',event=>{
   if(event.key!=='circuit-lab-experiments-v2')return;
   try{
     const next=normalizeCollection(JSON.parse(event.newValue));if(!next)return;
+    const wireDisplayChanged=next.settings.fitPhysicalWires!==store.data.settings.fitPhysicalWires;
     const removed=activeId&&!next.experiments.some(e=>e.id===activeId&&!e.archived),draft=removed?snapshot():null,name=title();
     if(removed){next.draft=draft;next.draftName=name;activeId=null;stopCameraAnimation();resetGestures();}
     next.activeId=activeId;store.data=next;
     if(removed){try{store.recover(draft,name);toast('当前实验已在其他页面归档或删除，编辑内容可在设置中恢复。');}catch{toast('当前实验已在其他页面移除，请在设置中导出备份以保留编辑内容。');}}
     applyTheme();applyUiScale();renderSidebar();renderTitle();renderArchives();void syncDesktopTitleBar();
+    if(wireDisplayChanged){
+      $('fitPhysicalWiresSetting').checked=next.settings.fitPhysicalWires;
+      renderBoard();
+    }
   }catch{}
 });
 let simulationTime=performance.now(),simulationSaved=simulationTime;

@@ -16,6 +16,18 @@ test('UI scale defaults, clamps invalid imports and persists across restart and 
   for(const [value,expected]of [[null,1],['1.5',1],[-1,.25],[99,2.5],[.9,1],[1.1,1]]){old.settings.uiScale=value;assert.equal(normalizeCollection(old).settings.uiScale,expected);}
 });
 
+test('physical wire curve fitting is opt-in and the preference survives reload',()=>{
+  const storage=new MemoryStorage(),store=new ExperimentStore(storage);
+  assert.equal(store.data.settings.fitPhysicalWires,false);
+  store.settings({fitPhysicalWires:true});
+  assert.equal(new ExperimentStore(storage).data.settings.fitPhysicalWires,true);
+  store.settings({fitPhysicalWires:false});
+  assert.equal(new ExperimentStore(storage).data.settings.fitPhysicalWires,false);
+  const old=JSON.parse(storage.getItem(EXPERIMENTS_KEY));
+  delete old.settings.fitPhysicalWires;
+  assert.equal(normalizeCollection(old).settings.fitPhysicalWires,false);
+});
+
 test('component presets survive reload and backup import and numeric values can exceed the slider range',()=>{
   const storage=new MemoryStorage(),store=new ExperimentStore(storage),state=createPreset('free');
   state.components=[component('r1','resistor',0,0,1234.56789),{...component('e1','battery',0,0,-80),internalResistance:250}];

@@ -1,1 +1,1 @@
-import './workbench.js?v=wire-curve-1';
+import './workbench.js?v=wire-display-2';

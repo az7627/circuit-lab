@@ -1,4 +1,4 @@
-import {simplifyTrace} from './wiring.js?v=wire-curve-1';
+import {simplifyTrace} from './wiring.js?v=wire-display-2';
 
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 const vector = (a,b) => ({x:b.x-a.x,y:b.y-a.y});
@@ -88,12 +88,11 @@ function flatten(curve,out,depth=0) {
   flatten([mid,last,cd,d],out,depth+1);
 }
 
-export function physicalWireCurve(points) {
-  if(points.length<3)return {path:straightWire(points),points};
+function sampledTrace(points) {
   const samples=points.filter((point,i)=>!i||distance(point,points[i-1])>1e-7);
   const last=samples.length-1,lengths=[0];
   for(let i=1;i<=last;i++)lengths.push(lengths[i-1]+distance(samples[i-1],samples[i]));
-  if(last<2||!Number.isFinite(lengths[last]))return {path:straightWire(points),points};
+  if(last<2||!Number.isFinite(lengths[last]))return null;
 
   function atLength(length,lo,hi) {
     while(hi-lo>1){
@@ -103,6 +102,58 @@ export function physicalWireCurve(points) {
     }
     return mix(samples[lo],samples[hi],(length-lengths[lo])/(lengths[hi]-lengths[lo]));
   }
+
+  // Identify deliberate bends on a simplified trace so pointer jitter cannot
+  // turn each small change of heading into a corner.
+  const coarse=simplifyTrace(samples,tolerance),corners=[0];
+  let index=1;
+  for(let i=1;i<coarse.length-1;i++){
+    const corner=coarse[i];
+    while(index<last&&(samples[index].x!==corner.x||samples[index].y!==corner.y))index++;
+    if(index>=last)break;
+    const incoming=normalize(vector(coarse[i-1],corner));
+    const outgoing=normalize(vector(corner,coarse[i+1]));
+    if(dot(incoming,outgoing)<=.5)corners.push(index);
+    index++;
+  }
+  corners.push(last);
+  return {samples,lengths,atLength,corners};
+}
+
+export function physicalWirePolyline(points) {
+  const trace=points.length>=4&&sampledTrace(points);
+  if(!trace)return {path:straightWire(points),points};
+  const {samples,lengths,atLength,corners}=trace;
+  const filtered=samples.slice();
+  let changed=false;
+  // Average nearby samples at equal arc-length offsets. The symmetric window
+  // shrinks at corners and ends, and sparse routes keep their existing bends.
+  for(let span=1;span<corners.length;span++){
+    const start=corners[span-1],end=corners[span];
+    for(let i=start+1;i<end;i++){
+      const length=lengths[i];
+      if(lengths[i+1]-length>6||length-lengths[i-1]>6)continue;
+      const radius=Math.min(4,length-lengths[start],lengths[end]-length);
+      let x=0,y=0;
+      for(let offset=-3;offset<=3;offset++){
+        const sample=atLength(length+radius*offset/3,start,end);
+        x+=sample.x;
+        y+=sample.y;
+      }
+      const mean={x:x/7,y:y/7},movement=distance(samples[i],mean);
+      if(movement<=1e-7)continue;
+      filtered[i]=mix(samples[i],mean,Math.min(1,1.3/movement));
+      changed=true;
+    }
+  }
+  const display=changed?filtered:points;
+  return {path:straightWire(display),points:display};
+}
+
+export function physicalWireCurve(points) {
+  const trace=points.length>=3&&sampledTrace(points);
+  if(!trace)return {path:straightWire(points),points};
+  const {samples,lengths,atLength,corners}=trace;
 
   function tangent(at,from,to) {
     const s=lengths[at],reach=12;
@@ -158,23 +209,9 @@ export function physicalWireCurve(points) {
     fit(split,end,center,right,depth+1);
   }
 
-  // Preserve deliberate sharp folds. The decimated route only identifies
-  // corners; the fit for each span still sees all the original input points.
-  const coarse=simplifyTrace(samples,tolerance);
-  let start=0,index=0;
-  for(let i=1;i<coarse.length-1;i++){
-    const corner=coarse[i];
-    const incoming=normalize(vector(coarse[i-1],corner));
-    const outgoing=normalize(vector(corner,coarse[i+1]));
-    if(dot(incoming,outgoing)>.5)continue;
-    // The simplifier preserves order, including when a loop visits a point twice.
-    for(;index<last;index++){
-      if(samples[index].x===corner.x&&samples[index].y===corner.y)break;
-    }
-    if(index<=start||index>=last)continue;
-    fit(start,index,tangent(start,start,index),tangent(index,start,index));
-    start=index++;
+  for(let i=1;i<corners.length;i++){
+    const start=corners[i-1],end=corners[i];
+    fit(start,end,tangent(start,start,end),tangent(end,start,end));
   }
-  fit(start,last,tangent(start,start,last),tangent(last,start,last));
   return curved?{path,points:flattened}:{path:straightWire(points),points};
 }
